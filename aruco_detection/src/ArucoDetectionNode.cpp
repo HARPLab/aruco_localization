@@ -17,15 +17,40 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
-#include <tf/transform_broadcaster.h>
-#include <tf/transform_listener.h>
+#include <tf2/convert.h>
+#include <tf2/LinearMath/Matrix3x3.h>
 
 #include <aruco_detection/Boards.h>
 
 struct ArucoBoard {
 	std::string name;
-	cv::aruco::Board board;
+	cv::Ptr<cv::aruco::Board> board;
 };
+
+
+void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msgs::Pose & pose)
+{
+	cv::Mat rot;
+	cv::Rodrigues(rvec, rot);
+
+	cv::Matx33f rotate_to_sys( 1.0, 0.0, 0.0,
+			0.0, -1.0, 0.0,
+			0.0, 0.0, -1.0);
+
+	rot = rot*rotate_to_sys.t();
+
+	pose.position.x = tvec.at(0);
+	pose.position.y = tvec.at(1);
+	pose.position.z = tvec.at(2);
+
+	tf2::Matrix3x3 const mat(rot.at(0), rot.at(1), rot.at(2),
+			rot.at(3), rot.at(4), rot.at(5),
+			rot.at(6), row.at(7), row.at(8));
+	tf2::Quaternion q;
+	mat.getRotation(q);
+
+	tf2::convert(q, pose.quaternion);
+}
 
 struct ArucoDetectionNode {
 	private:
@@ -33,8 +58,13 @@ struct ArucoDetectionNode {
 		bool draw_markers;
 		bool draw_markers_cube;
 		bool draw_markers_axis;
+
 		ros::Subscriber cam_info_sub;
 		bool cam_info_received;
+		cv::Mat cam_matrix;
+		cv::Mat dist_coeffs;
+
+
 		image_transport::Publisher image_pub;
 		ros::Publisher detection_pub;
 		std::string boards_config;
@@ -118,64 +148,62 @@ struct ArucoDetectionNode {
 				cv::Mat const & inImage = cv_ptr->image;
 				cv::Mat resultImg = cv_ptr->image.clone();
 
+				// todo: read this from config, maybe even board-specific?
+				cv::Ptr<cv::aruco::DetectorParameters> detector_params = cv::aruco::DetectorParameters::create();
+
 				bool const build_marked_image = (this->image_pub.getNumSubscribers() > 0);
 
 				aruco_detection::Boards boards;
+				boards.header.stamp = msg->header.stamp;
+				boards.header.frame_id = msg->header.frame_id;
 
 				std::transform( this->boards.begin(), this->boards.end(), std::back_inserter(boards.boards), [&] (ArucoBoard const & board) {
 
 					// Detect raw markers
 					std::vector< std::vector< cv::Point2f > > marker_corners;
 					std::vector< int > marker_ids;
+					std::vector< std::vector< cv::Point2f > > rejected_corners;
 
-					float probDetect = the_board_detector.detect(markers, boards[board_index].config, board_detected, camParam, boards[board_index].marker_size);
-					if (probDetect > 0.0)
-					{
-						tf::Transform transform = ar_sys::getTf(board_detected.Rvec, board_detected.Tvec);
 
-						tf::StampedTransform stampedTransform(transform, msg->header.stamp, msg->header.frame_id, boards[board_index].name);
+					cv::aruco::detectMarkers(inImage, board.board->dictionary, marker_corners, marker_ids, detector_params, rejected_corners,
+							this->cam_matrix, this->dist_coeffs);
+					cv::aruco::refineDetectedMarkers(inImage, board.board, marker_corners, marker_ids, rejected_corners, this->cam_matrix,
+							this->dist_coeffs);
 
-						geometry_msgs::PoseStamped poseMsg;
-						tf::poseTFToMsg(transform, poseMsg.pose);
-						poseMsg.header.frame_id = msg->header.frame_id;
-						poseMsg.header.stamp = msg->header.stamp;
-						pose_pub.publish(poseMsg);
+					aruco_detection::Board board_msg;
+					board_msg.board_name = board.name;
+					board_msg.num_detections = marker_ids.size();
 
-						geometry_msgs::TransformStamped transformMsg;
-						tf::transformStampedTFToMsg(stampedTransform, transformMsg);
-						transform_pub.publish(transformMsg);
+					if (build_marked_image) {
+						cv::aruco::drawDetectedMarkers(resultImg, marker_corners, marker_ids);
+						// TODO: different color per board?
+					}
 
-						geometry_msgs::Vector3Stamped positionMsg;
-						positionMsg.header = transformMsg.header;
-						positionMsg.vector = transformMsg.transform.translation;
-						position_pub.publish(positionMsg);
+					if (marker_ids.size() > 3) { // at least 3 detected points
+						cv::Mat rvec, tvec; // TODO: cache last position
+						int pts_used = cv::aruco::estimatePoseBoard(marker_corners, marker_ids, board.board, this->cam_matrix, this->dist_coeffs,
+								rvec, tvec);
 
-						if(camParam.isValid())
-						{
-							//draw board axis
-							CvDrawingUtils::draw3dAxis(resultImg, board_detected, camParam);
+						convert_cv_to_ros(rvec, tvec, board_msg.pose.pose);
+						board_msg.pose.covariance = std::vector<float>( {
+							0.001, 0.0, 0.0, 0.0, 0.0, 0.0,
+							0.0, 0.001, 0.0, 0.0, 0.0, 0.0,
+							0.0, 0.0, 0.001, 0.0, 0.0, 0.0,
+							0.0, 0.0, 0.0, 0.001, 0.0, 0.0,
+							0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
+							0.0, 0.0, 0.0, 0.0, 0.0, 0.001,
+						}); // TODO: something smarter with this
+
+
+						if (build_marked_image) {
+							cv::aruco::drawAxis(resultImg, this->cam_matrix, this->dist_coeffs, rvec, tvec, 0.1);
+							// TODO: different color per board?
 						}
+
 					}
 				} );
 
-				//for each marker, draw info and its boundaries in the image
-				for(size_t i=0; draw_markers && i < markers.size(); ++i)
-				{
-					markers[i].draw(resultImg,cv::Scalar(0,0,255),2);
-				}
-
-				if(camParam.isValid())
-				{
-					//draw a 3d cube in each marker if there is 3d info
-					for(size_t i=0; i<markers.size(); ++i)
-					{
-						if (draw_markers_cube) CvDrawingUtils::draw3dCube(resultImg, markers[i], camParam);
-						if (draw_markers_axis) CvDrawingUtils::draw3dAxis(resultImg, markers[i], camParam);
-					}
-				}
-
-				if(image_pub.getNumSubscribers() > 0)
-				{
+				if (build_marked_image) {
 					//show input with augmented information
 					cv_bridge::CvImage out_msg;
 					out_msg.header.frame_id = msg->header.frame_id;
@@ -184,15 +212,16 @@ struct ArucoDetectionNode {
 					out_msg.image = resultImg;
 					image_pub.publish(out_msg.toImageMsg());
 				}
+
+				this->detection_pub.publish(boards);
 			}
-			catch (cv_bridge::Exception& e)
-			{
+			catch (cv_bridge::Exception& e) {
 				ROS_ERROR("cv_bridge exception: %s", e.what());
 				return;
 			}
 		}
 
-		// wait for one camerainfo, then shut down that subscriber
+		// wait for one camera info, then shut down that subscriber
 		void cam_info_callback(const sensor_msgs::CameraInfo &msg) {
 			camParam = ar_sys::getCamParams(msg, useRectifiedImages);
 			cam_info_received = true;
