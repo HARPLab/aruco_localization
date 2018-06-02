@@ -13,18 +13,20 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/aruco.hpp>
+#include <opencv2/calib3d.hpp>
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.h>
 #include <tf2/convert.h>
 #include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <boost/filesystem.hpp>
 
 #include <aruco_detection/Boards.h>
 
-const std::map<std::string, int> aruco_dict_lookup = std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> = {
+const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> aruco_dict_lookup {
 	    {"DICT_4X4_50", cv::aruco::DICT_4X4_50},
 	    {"DICT_4X4_100", cv::aruco::DICT_4X4_100},
 	    {"DICT_4X4_250", cv::aruco::DICT_4X4_250},
@@ -79,7 +81,7 @@ struct ArucoBoard {
 		std::vector<ArucoBoard> boards;
 		// this wants to be transform_if but that doesn't exist because ranges aren't ready yet :(
 		std::for_each( fs::directory_iterator(fs::path(dir_name)), fs::directory_iterator(),
-				[] (fs::directory_entry const & entry) {
+				[&boards] (fs::directory_entry const & entry) {
 			if (fs::is_regular_file(entry.status())) {
 				boards.push_back(ArucoBoard::load_from_file(entry.path().native()));
 			}
@@ -97,23 +99,23 @@ void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msg
 	cv::Mat rot;
 	cv::Rodrigues(rvec, rot);
 
-	cv::Matx33f rotate_to_sys( 1.0, 0.0, 0.0,
+	cv::Mat rotate_to_sys = (cv::Mat_<double>(3,3) << 1.0, 0.0, 0.0,
 			0.0, -1.0, 0.0,
 			0.0, 0.0, -1.0);
 
 	rot = rot*rotate_to_sys.t();
 
-	pose.position.x = tvec.at(0);
-	pose.position.y = tvec.at(1);
-	pose.position.z = tvec.at(2);
+	pose.position.x = tvec.at<double>(0);
+	pose.position.y = tvec.at<double>(1);
+	pose.position.z = tvec.at<double>(2);
 
-	tf2::Matrix3x3 const mat(rot.at(0), rot.at(1), rot.at(2),
-			rot.at(3), rot.at(4), rot.at(5),
-			rot.at(6), row.at(7), row.at(8));
+	tf2::Matrix3x3 const mat(rot.at<double>(0), rot.at<double>(1), rot.at<double>(2),
+			rot.at<double>(3), rot.at<double>(4), rot.at<double>(5),
+			rot.at<double>(6), rot.at<double>(7), rot.at<double>(8));
 	tf2::Quaternion q;
 	mat.getRotation(q);
 
-	tf2::convert(q, pose.quaternion);
+	tf2::convert(q, pose.orientation);
 }
 
 struct ArucoDetectionNode {
@@ -202,14 +204,14 @@ struct ArucoDetectionNode {
 								rvec, tvec);
 
 						convert_cv_to_ros(rvec, tvec, board_msg.pose.pose);
-						board_msg.pose.covariance = std::vector<float>( {
+						board_msg.pose.covariance = boost::array<float, 36>{
 							0.001, 0.0, 0.0, 0.0, 0.0, 0.0,
 							0.0, 0.001, 0.0, 0.0, 0.0, 0.0,
 							0.0, 0.0, 0.001, 0.0, 0.0, 0.0,
 							0.0, 0.0, 0.0, 0.001, 0.0, 0.0,
 							0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
 							0.0, 0.0, 0.0, 0.0, 0.0, 0.001,
-						}); // TODO: something smarter with this
+						}; // TODO: something smarter with this
 
 
 						if (build_marked_image) {
@@ -218,6 +220,8 @@ struct ArucoDetectionNode {
 						}
 
 					}
+
+					return board_msg;
 				} );
 
 				if (build_marked_image) {
@@ -241,20 +245,20 @@ struct ArucoDetectionNode {
 		// wait for one camera info, then shut down that subscriber
 		void cam_info_callback(const sensor_msgs::CameraInfo & cam_info) {
 			if ( this->useRectifiedImages ) {
-				this->cam_matrix = cv::Matx33d(
+				this->cam_matrix = (cv::Mat_<double>(3,3) <<
 						cam_info.P[0], cam_info.P[1], cam_info.P[2],
 						cam_info.P[4], cam_info.P[5], cam_info.P[6],
 						cam_info.P[8], cam_info.P[9], cam_info.P[10]);
 
-				this->dist_coeffs = cv::Vec4d(0., 0., 0., 0.);
+				this->dist_coeffs = (cv::Mat_<double>(4,1) << 0., 0., 0., 0.);
 			}
 			else {
-				this->cam_matrix = cv::Matx33d(
+				this->cam_matrix = (cv::Mat_<double>(3,3) <<
 						cam_info.K[0], cam_info.K[1], cam_info.K[2],
 						cam_info.K[3], cam_info.K[4], cam_info.K[5],
 						cam_info.K[6], cam_info.K[7], cam_info.K[8]);
 
-				this->dist_coeffs = cv::Mat(cam_info.D);
+				this->dist_coeffs = cv::Mat(cam_info.D, true);
 			}
 
 			ROS_INFO("Received camera info.");
