@@ -20,12 +20,76 @@
 #include <tf2/convert.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 
+#include <boost/filesystem.hpp>
+
 #include <aruco_detection/Boards.h>
+
+const std::map<std::string, int> aruco_dict_lookup = std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> = {
+	    {"DICT_4X4_50", cv::aruco::DICT_4X4_50},
+	    {"DICT_4X4_100", cv::aruco::DICT_4X4_100},
+	    {"DICT_4X4_250", cv::aruco::DICT_4X4_250},
+	    {"DICT_4X4_1000", cv::aruco::DICT_4X4_1000},
+	    {"DICT_5X5_50", cv::aruco::DICT_5X5_50},
+	    {"DICT_5X5_100", cv::aruco::DICT_5X5_100},
+	    {"DICT_5X5_250", cv::aruco::DICT_5X5_250},
+	    {"DICT_5X5_1000", cv::aruco::DICT_5X5_1000},
+	    {"DICT_6X6_50", cv::aruco::DICT_6X6_50},
+	    {"DICT_6X6_100", cv::aruco::DICT_6X6_100},
+	    {"DICT_6X6_250", cv::aruco::DICT_6X6_250},
+	    {"DICT_6X6_1000", cv::aruco::DICT_6X6_1000},
+	    {"DICT_7X7_50", cv::aruco::DICT_7X7_50},
+	    {"DICT_7X7_100", cv::aruco::DICT_7X7_100},
+	    {"DICT_7X7_250", cv::aruco::DICT_7X7_250},
+	    {"DICT_7X7_1000", cv::aruco::DICT_7X7_1000},
+	    {"DICT_ARUCO_ORIGINAL", cv::aruco::DICT_ARUCO_ORIGINAL} };
 
 struct ArucoBoard {
 	std::string name;
 	cv::Ptr<cv::aruco::Board> board;
+
+
+
+	static cv::Ptr<cv::aruco::Dictionary> getPredefinedDictionaryFromName(std::string const & name) {
+		return cv::aruco::getPredefinedDictionary(aruco_dict_lookup.at(name));
+	}
+
+	static ArucoBoard load_from_file(std::string const & filename) {
+
+		ArucoBoard board;
+
+		cv::FileStorage fs (filename.c_str(), cv::FileStorage::READ );
+
+		std::string const dict = fs["dictionary"];
+		int const marker_x = fs["marker_x"];
+		int const marker_y = fs["marker_y"];
+		double const marker_len = fs["marker_length"];
+		double const marker_sep = fs["marker_separation"];
+
+		cv::String name;
+		cv::read(fs["name"], name, boost::filesystem::path(filename).stem().native());
+
+		board.name = cv::String(fs["name"]).c_str();
+		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict));
+
+		return board;
+	}
+
+	static std::vector<ArucoBoard> load_from_directory(std::string const & dir_name) {
+		namespace fs = boost::filesystem;
+		std::vector<ArucoBoard> boards;
+		// this wants to be transform_if but that doesn't exist because ranges aren't ready yet :(
+		std::for_each( fs::directory_iterator(fs::path(dir_name)), fs::directory_iterator(),
+				[] (fs::directory_entry const & entry) {
+			if (fs::is_regular_file(entry.status())) {
+				boards.push_back(ArucoBoard::load_from_file(entry.path().native()));
+			}
+		});
+
+		return boards;
+	}
+
 };
+
 
 
 void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msgs::Pose & pose)
@@ -55,20 +119,14 @@ void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msg
 struct ArucoDetectionNode {
 	private:
 		bool useRectifiedImages;
-		bool draw_markers;
-		bool draw_markers_cube;
-		bool draw_markers_axis;
 
 		ros::Subscriber cam_info_sub;
 		bool cam_info_received;
 		cv::Mat cam_matrix;
 		cv::Mat dist_coeffs;
 
-
 		image_transport::Publisher image_pub;
 		ros::Publisher detection_pub;
-		std::string boards_config;
-		std::string boards_directory;
 		std::vector<ArucoBoard> boards;
 
 		ros::NodeHandle nh;
@@ -87,53 +145,12 @@ struct ArucoDetectionNode {
 				this->image_pub = this->it.advertise("result", 1);
 				this->detection_pub = this->nh.advertise<aruco_detection::Boards>("detections", 100);
 
-				this->nh.param<std::string>("boards_config", this->boards_config, "boardsConfiguration.yml");
-				this->nh.param<std::string>("boards_directory", this->boards_directory, "./data");
+				std::string boards_dir;
+				this->nh.param<std::string>("boards_directory", boards_dir, "./data");
 				this->nh.param<bool>("image_is_rectified", this->useRectifiedImages, true);
-				this->nh.param<bool>("draw_markers", this->draw_markers, false);
-				this->nh.param<bool>("draw_markers_cube", this->draw_markers_cube, false);
-				this->nh.param<bool>("draw_markers_axis", this->draw_markers_axis, false);
 
-				this->readFromFile(this->boards_config);
-				ROS_INFO("ArSys node started with boards configuration: %s", boards_config.c_str());
-		}
-
-		void readFromFile ( std::string const & sfile ) throw ( cv::Exception ) {
-			try {
-				cv::FileStorage fs ( sfile.c_str(), cv::FileStorage::READ );
-				readFromFile ( fs );
-			}
-			catch (std::exception &ex)
-			{
-				throw	cv::Exception ( 81818,"ArSysMultiBoards::readFromFile",ex.what()+string(" file=)")+sfile ,__FILE__,__LINE__ );
-			}
-		}
-
-
-		void readFromFile ( cv::FileStorage &fs ) throw ( cv::Exception )
-		{
-			//look for the ar_sys_boards
-			if (fs["ar_sys_boards"].name() != "ar_sys_boards")
-				throw cv::Exception ( 81818,"ArSysMultiBoards::readFromFile","invalid file type" ,__FILE__,__LINE__ );
-
-			cv::FileNode FnBoards=fs["ar_sys_boards"];
-			for (cv::FileNodeIterator it = FnBoards.begin(); it != FnBoards.end(); ++it)
-			{
-				board_t board;
-
-				board.uid = boards.size();
-				board.name = (std::string)(*it)["name"];
-				board.marker_size = (double)(*it)["marker_size"];
-
-				std::string path(boards_directory);
-				path.append("/");
-				path.append((std::string)(*it)["path"]);
-				board.config.readFromFile(path);
-
-				boards.push_back(board);
-			}
-
-			ROS_ASSERT(boards.size() > 0);
+				this->boards = ArucoBoard::load_from_directory(boards_dir);
+				ROS_INFO("Aruco board detector node started with boards configuration: %s", boards_dir.c_str());
 		}
 
 		void image_callback(const sensor_msgs::ImageConstPtr& msg)
@@ -222,8 +239,25 @@ struct ArucoDetectionNode {
 		}
 
 		// wait for one camera info, then shut down that subscriber
-		void cam_info_callback(const sensor_msgs::CameraInfo &msg) {
-			camParam = ar_sys::getCamParams(msg, useRectifiedImages);
+		void cam_info_callback(const sensor_msgs::CameraInfo & cam_info) {
+			if ( this->useRectifiedImages ) {
+				this->cam_matrix = cv::Matx33d(
+						cam_info.P[0], cam_info.P[1], cam_info.P[2],
+						cam_info.P[4], cam_info.P[5], cam_info.P[6],
+						cam_info.P[8], cam_info.P[9], cam_info.P[10]);
+
+				this->dist_coeffs = cv::Vec4d(0., 0., 0., 0.);
+			}
+			else {
+				this->cam_matrix = cv::Matx33d(
+						cam_info.K[0], cam_info.K[1], cam_info.K[2],
+						cam_info.K[3], cam_info.K[4], cam_info.K[5],
+						cam_info.K[6], cam_info.K[7], cam_info.K[8]);
+
+				this->dist_coeffs = cv::Mat(cam_info.D);
+			}
+
+			ROS_INFO("Received camera info.");
 			cam_info_received = true;
 			cam_info_sub.shutdown();
 		}

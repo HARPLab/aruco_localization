@@ -39,10 +39,13 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
-# include_directories(include)
 include_directories(
   ${catkin_INCLUDE_DIRS}
 )
+
+add_executable(aruco_detection_node
+    src/ArucoDetectionNode.cpp
+    )
 
 #add_custom_target(${PROJECT_NAME}_data ALL
 #    COMMAND ${CMAKE_COMMAND} -E copy_directory
