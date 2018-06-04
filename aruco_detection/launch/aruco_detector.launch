@@ -1,6 +1,10 @@
 <launch>
-  <node pkg="aruco_detection" name="aruco_detection_node" type="aruco_detection_node" >
-    <param name="boards_directory" value="$(find aruco_detection)/config/boards" />
+  <node pkg="aruco_detection" name="aruco_detection_node" type="aruco_detection_node" output="screen" >
+    <rosparam command="load" ns="board/table_grid" file="$(find aruco_detection)/config/boards/table_grid.yml" />
+    <rosparam command="load" ns="board/back_grid" file="$(find aruco_detection)/config/boards/back_grid.yml" />
+    <rosparam command="load" ns="board/big_grid" file="$(find aruco_detection)/config/boards/big_grid.yml" />
+    <rosparam command="load" ns="board/far_back_grid" file="$(find aruco_detection)/config/boards/far_back_grid.yml" />
+    <rosparam command="load" ns="board/fridge_column_grid" file="$(find aruco_detection)/config/boards/fridge_column_grid.yml" />
   </node>
 
 </launch>

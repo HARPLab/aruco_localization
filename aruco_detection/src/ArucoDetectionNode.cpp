@@ -53,7 +53,11 @@ struct ArucoBoard {
 
 
 	static cv::Ptr<cv::aruco::Dictionary> getPredefinedDictionaryFromName(std::string const & name) {
-		return cv::aruco::getPredefinedDictionary(aruco_dict_lookup.at(name));
+		try {
+			return cv::aruco::getPredefinedDictionary(aruco_dict_lookup.at(name));
+		} catch (std::out_of_range & e) {
+			throw std::out_of_range(std::string("No such dictionary name: ") + name);
+		}
 	}
 
 	static ArucoBoard load_from_file(std::string const & filename) {
@@ -99,38 +103,53 @@ struct ArucoBoard {
 		return boards;
 	}
 
-	static ArucoBoard load_from_param_ns(ros::NodeHandle const & nh, std::string const & name, std::string const & prefix = "/") {
+	static ArucoBoard load_from_param_ns(ros::NodeHandle const & nh, std::string const & name, std::string const & prefix = "~") {
 		ArucoBoard board;
 
 		std::string dict;
-		int marker_x, marker_y;
+		int marker_x, marker_y, start_id;
 		double marker_len, marker_sep;
 
 		std::string const full_prefix = prefix + "/" + name + "/";
+
+		ROS_DEBUG_STREAM("Building board for " << full_prefix);
 
 		nh.getParam(full_prefix + "dictionary", dict);
 		nh.getParam(full_prefix + "marker_x", marker_x);
 		nh.getParam(full_prefix + "marker_y", marker_y);
 		nh.getParam(full_prefix + "marker_length", marker_len);
 		nh.getParam(full_prefix + "marker_separation", marker_sep);
+		if (nh.hasParam(full_prefix + "start_id")) {
+			nh.getParam(full_prefix + "start_id", start_id);
+		} else {
+			start_id = 0;
+		}
 
 		board.name = name;
-		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict));
+		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict), start_id);
 
 		return board;
 	}
 
 	static std::vector<ArucoBoard> load_from_params(ros::NodeHandle const & nh) {
-		std::vector<std::string> topics;
-		nh.getParam("dictionary", topics);
+//		std::vector<std::string> topics;
+		XmlRpc::XmlRpcValue topics;
+		typedef std::pair<std::string, XmlRpc::XmlRpcValue> PairType;
+		nh.getParam("board", topics);
 
+		ROS_DEBUG("Found boards:");
+		std::for_each(topics.begin(), topics.end(), [] (PairType const & pair) {
+			ROS_DEBUG_STREAM("\t" << pair.first);
+		});
+
+		ROS_DEBUG("Building boards...");
 		std::vector<ArucoBoard> boards;
 		std::transform(
 				topics.begin(),
 				topics.end(),
 				std::back_inserter(boards),
-				[&nh] (std::string const & topic) {
-			return ArucoBoard::load_from_param_ns(nh, topic, "dictionary");
+				[&nh] ( PairType const & pair) {
+			return ArucoBoard::load_from_param_ns(nh, pair.first, "board");
 		});
 
 		return boards;
@@ -192,13 +211,14 @@ struct ArucoDetectionNode {
 
 				this->image_pub = this->it.advertise("result", 1);
 				this->detection_pub = this->nh.advertise<aruco_detection::Boards>("detections", 100);
-
-				std::string boards_dir;
-				this->nh.param<std::string>("boards_directory", boards_dir, "./data");
 				this->nh.param<bool>("image_is_rectified", this->useRectifiedImages, true);
 
-				this->boards = ArucoBoard::load_from_params(boards_dir);
-				ROS_INFO("Aruco board detector node started with boards configuration: %s", boards_dir.c_str());
+				this->boards = ArucoBoard::load_from_params(this->nh);
+				ROS_INFO("Aruco board detector node started with boards: ");
+				std::for_each(this->boards.begin(), this->boards.end(),
+						[] (ArucoBoard const & board) {
+					ROS_INFO_STREAM("\t" << board.name);
+				});
 		}
 
 		void image_callback(const sensor_msgs::ImageConstPtr& msg)

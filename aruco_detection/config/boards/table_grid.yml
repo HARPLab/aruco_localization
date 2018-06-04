@@ -1,5 +1,4 @@
-%YAML:1.0
-dictionary: "DICT_4X4_100"
+dictionary: DICT_4X4_100
 marker_x: 9
 marker_y: 7
 marker_length: 0.03
