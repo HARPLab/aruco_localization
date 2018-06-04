@@ -1,0 +1,6 @@
+<launch>
+  <node pkg="aruco_detection" name="aruco_detection_node" type="aruco_detection_node" >
+    <param name="boards_directory" value="$(find aruco_detection)/config/boards" />
+  </node>
+
+</launch>

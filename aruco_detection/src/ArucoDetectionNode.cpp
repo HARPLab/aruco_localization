@@ -21,6 +21,7 @@
 #include <tf2/convert.h>
 #include <tf2/LinearMath/Matrix3x3.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <XmlRpcValue.h>
 
 #include <boost/filesystem.hpp>
 
@@ -56,12 +57,20 @@ struct ArucoBoard {
 	}
 
 	static ArucoBoard load_from_file(std::string const & filename) {
+		ROS_INFO_STREAM("Reading from file " << filename);
 
 		ArucoBoard board;
 
-		cv::FileStorage fs (filename.c_str(), cv::FileStorage::READ );
+		cv::FileStorage fs(cv::String(filename.c_str()), cv::FileStorage::READ );
+		ROS_INFO_STREAM("File opened " << filename.c_str());
+
+		cv::FileNode root = fs.getFirstTopLevelNode();
+		for (auto it = root.begin(); it != root.end(); ++it) {
+			ROS_INFO_STREAM( "node: " << (*it).name() << ": " << (*it).type());
+		}
 
 		std::string const dict = fs["dictionary"];
+		ROS_INFO_STREAM("Read dictionary " << dict);
 		int const marker_x = fs["marker_x"];
 		int const marker_y = fs["marker_y"];
 		double const marker_len = fs["marker_length"];
@@ -85,6 +94,43 @@ struct ArucoBoard {
 			if (fs::is_regular_file(entry.status())) {
 				boards.push_back(ArucoBoard::load_from_file(entry.path().native()));
 			}
+		});
+
+		return boards;
+	}
+
+	static ArucoBoard load_from_param_ns(ros::NodeHandle const & nh, std::string const & name, std::string const & prefix = "/") {
+		ArucoBoard board;
+
+		std::string dict;
+		int marker_x, marker_y;
+		double marker_len, marker_sep;
+
+		std::string const full_prefix = prefix + "/" + name + "/";
+
+		nh.getParam(full_prefix + "dictionary", dict);
+		nh.getParam(full_prefix + "marker_x", marker_x);
+		nh.getParam(full_prefix + "marker_y", marker_y);
+		nh.getParam(full_prefix + "marker_length", marker_len);
+		nh.getParam(full_prefix + "marker_separation", marker_sep);
+
+		board.name = name;
+		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict));
+
+		return board;
+	}
+
+	static std::vector<ArucoBoard> load_from_params(ros::NodeHandle const & nh) {
+		std::vector<std::string> topics;
+		nh.getParam("dictionary", topics);
+
+		std::vector<ArucoBoard> boards;
+		std::transform(
+				topics.begin(),
+				topics.end(),
+				std::back_inserter(boards),
+				[&nh] (std::string const & topic) {
+			return ArucoBoard::load_from_param_ns(nh, topic, "dictionary");
 		});
 
 		return boards;
@@ -151,7 +197,7 @@ struct ArucoDetectionNode {
 				this->nh.param<std::string>("boards_directory", boards_dir, "./data");
 				this->nh.param<bool>("image_is_rectified", this->useRectifiedImages, true);
 
-				this->boards = ArucoBoard::load_from_directory(boards_dir);
+				this->boards = ArucoBoard::load_from_params(boards_dir);
 				ROS_INFO("Aruco board detector node started with boards configuration: %s", boards_dir.c_str());
 		}
 
