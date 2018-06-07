@@ -1,0 +1,20 @@
+image_width: 1280
+image_height: 720
+camera_name: pupil_world
+camera_matrix:
+  rows: 3
+  cols: 3
+  data: [1860.851402920934, 0.0, 743.1478364518285, 0.0, 1797.104246131376, 288.9152952024361, 0.0, 0.0, 1.0]
+distortion_model: plumb_bob
+distortion_coefficients:
+  rows: 1
+  cols: 5
+  data: [0.3334280843813293, -1.7899436945976845, -0.00775666828449981, 0.016649066981351927, 3.315313719788914]
+rectification_matrix:
+  rows: 3
+  cols: 3
+  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+projection_matrix:
+  rows: 3
+  cols: 4
+  data: [2348.257291, 0, 809.568039, 0, 0, 2344.569053, 563.818346, 0, 0, 0, 1, 0]

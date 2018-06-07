@@ -14,6 +14,7 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/aruco.hpp>
 #include <opencv2/calib3d.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
@@ -48,11 +49,29 @@ const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> aruco_dict_lo
 
 struct ArucoBoard {
 	std::string name;
-	cv::Ptr<cv::aruco::Board> board;
+
+#if CV_VERSION_MAJOR >= 3 and CV_VERSION_MINOR >= 2
+	typedef cv::Ptr<cv::aruco::Dictionary> DictType;
+	typedef cv::Ptr<cv::aruco::Board> BoardType;
+#define CV_ARUCO_ADV
+#else
+	typedef cv::aruco::Dictionary DictType;
+	typedef cv::aruco::Board BoardType;
+#endif
+
+	BoardType board;
+
+	DictType const & get_dict() const {
+#ifdef CV_ARUCO_ADV
+		return this->board->dictionary;
+#else // CV_ARUCO_ADV
+		return this->board.dictionary;
+#endif // CV_ARUCO_ADV
+	}
 
 
 
-	static cv::Ptr<cv::aruco::Dictionary> getPredefinedDictionaryFromName(std::string const & name) {
+	static DictType getPredefinedDictionaryFromName(std::string const & name) {
 		try {
 			return cv::aruco::getPredefinedDictionary(aruco_dict_lookup.at(name));
 		} catch (std::out_of_range & e) {
@@ -126,8 +145,16 @@ struct ArucoBoard {
 		}
 
 		board.name = name;
-		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict), start_id);
 
+#ifdef CV_ARUCO_ADV
+		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict), start_id);
+#else // CV_ARUCO_ADV
+		if (start_id != 0) {
+			ROS_WARN("OpenCV version does not allow start_id!");
+		} else {
+			board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict));
+		}
+#endif // CV_ARUCO_ADV
 		return board;
 	}
 
@@ -206,8 +233,12 @@ struct ArucoDetectionNode {
 			: cam_info_received(false),
 			nh("~"),
 			it(nh) {
-				this->image_sub = this->it.subscribe("/image", 1, &ArucoDetectionNode::image_callback, this);
-				this->cam_info_sub = this->nh.subscribe("/camera_info", 1, &ArucoDetectionNode::cam_info_callback, this);
+
+				std::string const topic = this->nh.resolveName("/image");
+				ROS_INFO_STREAM("Subscribing to image topic " << topic);
+
+				this->image_sub = this->it.subscribe(topic + "/image_raw", 1, &ArucoDetectionNode::image_callback, this);
+				this->cam_info_sub = this->nh.subscribe(topic + "/camera_info", 1, &ArucoDetectionNode::cam_info_callback, this);
 
 				this->image_pub = this->it.advertise("result", 1);
 				this->detection_pub = this->nh.advertise<aruco_detection::Boards>("detections", 100);
@@ -227,48 +258,67 @@ struct ArucoDetectionNode {
 				return;
 			}
 
+			ROS_DEBUG_STREAM("Image info:\n"
+					<< "\tWidth: " << msg->width << "\n"
+					<< "\tHeight: " << msg->height << "\n"
+					<< "\tEncoding: " << msg->encoding << "\n"
+					<< "\tSize: " << msg->data.size()
+					);
+
 			cv_bridge::CvImagePtr cv_ptr;
-			try {
-				cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::RGB8);
-				cv::Mat const & inImage = cv_ptr->image;
-				cv::Mat resultImg = cv_ptr->image.clone();
+			try	{
+				cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+			} catch (cv_bridge::Exception & e) {
+				ROS_ERROR_STREAM("Failed to convert ptr: " << e.what());
+				return;
+			}
 
-				// todo: read this from config, maybe even board-specific?
-				cv::Ptr<cv::aruco::DetectorParameters> detector_params = cv::aruco::DetectorParameters::create();
+			cv::Mat const & inImage = cv_ptr->image;
+			cv::Mat resultImg = cv_ptr->image.clone();
 
-				bool const build_marked_image = (this->image_pub.getNumSubscribers() > 0);
+			// todo: read this from config, maybe even board-specific?
+#ifdef CV_ARUCO_ADV
+			cv::Ptr<cv::aruco::DetectorParameters> detector_params = cv::aruco::DetectorParameters::create();
+#else // CV_ARUCO_ADV
+			cv::aruco::DetectorParameters detector_params;
+#endif // CV_ARUCO_ADV
 
-				aruco_detection::Boards boards;
-				boards.header.stamp = msg->header.stamp;
-				boards.header.frame_id = msg->header.frame_id;
-
-				std::transform( this->boards.begin(), this->boards.end(), std::back_inserter(boards.boards), [&] (ArucoBoard const & board) {
-
-					// Detect raw markers
-					std::vector< std::vector< cv::Point2f > > marker_corners;
-					std::vector< int > marker_ids;
-					std::vector< std::vector< cv::Point2f > > rejected_corners;
+			bool const build_marked_image = (this->image_pub.getNumSubscribers() > 0);
 
 
-					cv::aruco::detectMarkers(inImage, board.board->dictionary, marker_corners, marker_ids, detector_params, rejected_corners,
-							this->cam_matrix, this->dist_coeffs);
-					cv::aruco::refineDetectedMarkers(inImage, board.board, marker_corners, marker_ids, rejected_corners, this->cam_matrix,
-							this->dist_coeffs);
+			aruco_detection::Boards boards;
+			boards.header.stamp = msg->header.stamp;
+			boards.header.frame_id = msg->header.frame_id;
 
-					aruco_detection::Board board_msg;
-					board_msg.board_name = board.name;
-					board_msg.num_detections = marker_ids.size();
+			std::transform( this->boards.begin(), this->boards.end(), std::back_inserter(boards.boards), [&] (ArucoBoard const & board) {
 
-					if (build_marked_image) {
-						cv::aruco::drawDetectedMarkers(resultImg, marker_corners, marker_ids);
-						// TODO: different color per board?
-					}
+				// Detect raw markers
+				std::vector< std::vector< cv::Point2f > > marker_corners;
+				std::vector< int > marker_ids;
+				std::vector< std::vector< cv::Point2f > > rejected_corners;
 
-					if (marker_ids.size() > 3) { // at least 3 detected points
-						cv::Mat rvec, tvec; // TODO: cache last position
-						int pts_used = cv::aruco::estimatePoseBoard(marker_corners, marker_ids, board.board, this->cam_matrix, this->dist_coeffs,
-								rvec, tvec);
 
+				cv::aruco::detectMarkers(inImage, board.get_dict(), marker_corners, marker_ids, detector_params, rejected_corners,
+						this->cam_matrix, this->dist_coeffs);
+				cv::aruco::refineDetectedMarkers(inImage, board.board, marker_corners, marker_ids, rejected_corners, this->cam_matrix,
+						this->dist_coeffs);
+
+				aruco_detection::Board board_msg;
+				board_msg.board_name = board.name;
+				board_msg.num_detections = marker_ids.size();
+				board_msg.num_inliers = 0;
+
+				if (build_marked_image) {
+					cv::aruco::drawDetectedMarkers(resultImg, marker_corners, marker_ids);
+					// TODO: different color per board?
+				}
+
+				if (marker_ids.size() > 3) { // at least 3 detected points
+					cv::Mat rvec, tvec; // TODO: cache last position
+					board_msg.num_inliers = cv::aruco::estimatePoseBoard(marker_corners, marker_ids, board.board, this->cam_matrix, this->dist_coeffs,
+							rvec, tvec);
+
+					if (board_msg.num_inliers > 0) {
 						convert_cv_to_ros(rvec, tvec, board_msg.pose.pose);
 						board_msg.pose.covariance = boost::array<float, 36>{
 							0.001, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -284,28 +334,24 @@ struct ArucoDetectionNode {
 							cv::aruco::drawAxis(resultImg, this->cam_matrix, this->dist_coeffs, rvec, tvec, 0.1);
 							// TODO: different color per board?
 						}
-
 					}
 
-					return board_msg;
-				} );
-
-				if (build_marked_image) {
-					//show input with augmented information
-					cv_bridge::CvImage out_msg;
-					out_msg.header.frame_id = msg->header.frame_id;
-					out_msg.header.stamp = msg->header.stamp;
-					out_msg.encoding = sensor_msgs::image_encodings::RGB8;
-					out_msg.image = resultImg;
-					image_pub.publish(out_msg.toImageMsg());
 				}
 
-				this->detection_pub.publish(boards);
+				return board_msg;
+			} );
+
+			if (build_marked_image) {
+				//show input with augmented information
+				cv_bridge::CvImage out_msg;
+				out_msg.header.frame_id = msg->header.frame_id;
+				out_msg.header.stamp = msg->header.stamp;
+				out_msg.encoding = sensor_msgs::image_encodings::RGB8;
+				out_msg.image = resultImg;
+				image_pub.publish(out_msg.toImageMsg());
 			}
-			catch (cv_bridge::Exception& e) {
-				ROS_ERROR("cv_bridge exception: %s", e.what());
-				return;
-			}
+
+			this->detection_pub.publish(boards);
 		}
 
 		// wait for one camera info, then shut down that subscriber
