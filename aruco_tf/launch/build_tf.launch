@@ -1,0 +1,10 @@
+<launch>
+  <include file="$(find aruco_detection)/launch/video_playback.launch" />
+
+  <node pkg="aruco_tf" name="build_aruco_tfs" type="build_static_transforms.py">
+    <param name="ref_board" value="table_grid" />
+    <param name="topic" value="/aruco_detection/aruco_detection_node/detections" />
+    <param name="output_dir" value="$(find aruco_tf)/data" />
+  </node>
+
+</launch>

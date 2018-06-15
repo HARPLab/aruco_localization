@@ -1,3 +1,6 @@
 .*project
 .settings/*
 aruco_detection/data
+aruco_tf/data
+.DS_Store
+
