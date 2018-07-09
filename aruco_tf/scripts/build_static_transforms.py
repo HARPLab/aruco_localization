@@ -56,8 +56,8 @@ class StaticOffsetCollector:
         
         T_ref = transform.quaternion_matrix(q_ref)
         T_ref[0:3,3] = t_ref
-        
-        T_ttl = np.linalg.inv(T_ref) * T_pose
+        rospy.logdebug('{}: \n\tTref: {},\n\t Tpose: {}'.format(self.name, T_ref, T_pose))
+        T_ttl = np.dot(np.linalg.inv(T_ref), T_pose)
         
         self.translations.append(T_ttl[0:3,3].tolist())
         self.quaternions.append(transform.quaternion_from_matrix(T_ttl).tolist())
@@ -86,7 +86,7 @@ class TimeGapEndCondition:
             
 
 class OffsetCollector:
-    def __init__(self, topic, ref_frame, end_condition=NumPointsEndCondition(10)):
+    def __init__(self, topic, ref_frame, end_condition=TimeGapEndCondition(rospy.Duration.from_sec(3.))):
         self.ref_frame = ref_frame
         self.offset_collectors = {}
         self.end_condition = end_condition
@@ -102,7 +102,7 @@ class OffsetCollector:
             return
         
         for board in msg.boards:
-            if board.num_inliers > 0:
+            if board.num_inliers > 0 and board.board_name != self.ref_frame:
                 if board.board_name in self.offset_collectors:
                     self.offset_collectors[board.board_name].do_update(board.pose, ref_pose)
                 else:
@@ -136,7 +136,7 @@ class OffsetCollector:
         with open(os.path.join(d, 'static_board.launch'), 'w') as f:
             f.write('<launch>\n')
             for name, p in pose.items():
-                f.write('  <node pkg="tf2_ros" type="static_tranform_publisher" name="{}_broadcaster" args="{} {} {} {} {} {} {} {} {} 100">\n'.format(
+                f.write('  <node pkg="tf2_ros" type="static_transform_publisher" name="{}_broadcaster" args="{} {} {} {} {} {} {} {} {}" />\n'.format(
                         name,
                         p.pose.pose.position.x,
                         p.pose.pose.position.y,
@@ -149,6 +149,7 @@ class OffsetCollector:
                         name
                     ))
             f.write('</launch>\n')
+        rospy.loginfo('Wrote data for {} frames.'.format(len(self.offset_collectors.values()[0].translations)) )
         
     
 def main():
