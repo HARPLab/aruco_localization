@@ -10,9 +10,11 @@
 	  
 	    <rosparam command="load" ns="board/table_grid" file="$(find aruco_detection)/config/boards/table_grid.yml" />
 	    <rosparam command="load" ns="board/back_grid" file="$(find aruco_detection)/config/boards/back_grid.yml" />
-	    <rosparam command="load" ns="board/big_grid" file="$(find aruco_detection)/config/boards/big_grid.yml" />
+	    <!-- <rosparam command="load" ns="board/big_grid" file="$(find aruco_detection)/config/boards/big_grid.yml" /> -->
 	    <rosparam command="load" ns="board/far_back_grid" file="$(find aruco_detection)/config/boards/far_back_grid.yml" />
 	    <rosparam command="load" ns="board/fridge_column_grid" file="$(find aruco_detection)/config/boards/fridge_column_grid.yml" />
+	    
+	    <param name="image_is_rectified" value="false" />
 	  </node>
 	  
 	  <node if="$(arg visualize)" name="aruco_detection_img" pkg="image_view" type="image_view">

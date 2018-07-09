@@ -373,7 +373,7 @@ struct ArucoDetectionNode {
 				this->dist_coeffs = cv::Mat(cam_info.D, true);
 			}
 
-			ROS_INFO("Received camera info.");
+			ROS_INFO_STREAM("Received camera info:\nK=" << this->cam_matrix << "\nD=" << this->dist_coeffs);
 			cam_info_received = true;
 			cam_info_sub.shutdown();
 		}
