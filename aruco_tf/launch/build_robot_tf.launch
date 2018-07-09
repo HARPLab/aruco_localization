@@ -1,0 +1,20 @@
+<launch>
+  <arg name="cal_file" default="calibrationParameters.yml" />
+  <arg name="bag_file" default="2018-06-05-17-42-09.bag" />
+  
+  <include file="$(find aruco_detection)/launch/aruco_detector.launch">
+     <arg name="image_topic" value="/camera/rgb" />
+     <arg name="visualize" value="true" />
+     <arg name="record" value="false" />
+  </include>
+
+  <node pkg="aruco_tf" name="build_robot_tfs" type="build_robot_transform.py" output="screen">
+    <param name="robot_frame" value="world" />
+    <param name="topic" value="/aruco_detection/aruco_detection_node/detections" />
+    <param name="output_dir" value="$(find aruco_tf)/data/robot_cal" />
+    <rosparam command="load" ns="ref_pose" file="$(find aruco_tf)/data/robot_cal/$(arg cal_file)" />
+  </node>
+  
+  <node pkg="rosbag" name="rosbag_playback" type="play" args="$(find aruco_tf)/data/robot_cal/$(arg bag_file) -r 0.5" output="screen" />
+
+</launch>
