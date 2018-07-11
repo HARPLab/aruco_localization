@@ -65,8 +65,10 @@ public:
 				tf2::Transform full_tf;
 				full_tf.mult(board_tf, base_tf);
 
+				transforms.push_back(std::move(full_tf));
+
 			} catch (tf2::TransformException & ex) {
-				ROS_WARN_STREAM("Failed to look up frame " << board.board_name << " to " << this->params.ref_frame << ": " << ex.what());
+				ROS_DEBUG_STREAM("Failed to look up frame " << board.board_name << " to " << this->params.ref_frame << ": " << ex.what());
 			}
 		});
 
@@ -86,6 +88,7 @@ public:
 		geometry_msgs::TransformStamped final_tf_msg;
 		final_tf_msg.header.stamp = boards->header.stamp;
 		final_tf_msg.header.frame_id = this->params.ref_frame;
+		final_tf_msg.child_frame_id = this->params.camera_name;
 		final_tf_msg.transform = tf2::toMsg(final_tf);
 
 		this->tf_broadcaster.sendTransform(final_tf_msg);

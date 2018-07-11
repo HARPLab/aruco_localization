@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="aruco_localization" type="aruco_localization_node" name="aruco_localization_node" output="screen">
+    <param name="camera_name" value="pupil_world" />
+    <param name="ref_frame" value="robot_base" />
+    <param name="aruco_detection_topic" value="/aruco_detection/aruco_detection_node/detections" />
+  </node>
+</launch>

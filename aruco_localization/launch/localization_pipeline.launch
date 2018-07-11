@@ -1,0 +1,5 @@
+<launch>
+  <include file="$(find aruco_detection)/launch/video_playback.launch" />
+  <include file="$(find aruco_tf)/launch/static_board.launch" />
+  <include file="$(find aruco_localization)/launch/aruco_localization.launch" />
+</launch>
