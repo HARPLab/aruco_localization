@@ -48,13 +48,13 @@ class StaticOffsetCollector:
         
     def do_update(self, pose, ref_pose):
         t = [ pose.pose.position.x, pose.pose.position.y, pose.pose.position.z ]
-        q = [ pose.pose.orientation.w, pose.pose.orientation.x, pose.pose.orientation.y, pose.pose.orientation.z ]
+        q = [ pose.pose.orientation.x, pose.pose.orientation.y, pose.pose.orientation.z, pose.pose.orientation.w ]
         
         T_pose = transform.quaternion_matrix(q)
         T_pose[0:3,3] = t
         
-        rospy.logdebug('{}: \n\tTref: {},\n\t Tpose: {}'.format(self.name, ref_pose, T_pose))
-        T_ttl = np.dot(np.linalg.inv(ref_pose), T_pose)
+        rospy.loginfo('{}: \n\tTref: {},\n\t Tpose: {}'.format(self.name, ref_pose, T_pose))
+        T_ttl = np.dot(ref_pose, T_pose)
         
         self.translations.append(T_ttl[0:3,3].tolist())
         self.quaternions.append(transform.quaternion_from_matrix(T_ttl).tolist())
@@ -124,7 +124,7 @@ class OffsetCollector:
         with open(os.path.join(d, 'pose.yaml'), 'wb') as f:
             yaml.dump(pose_raw, f)
             
-        with open(os.path.join(d, 'static_board.launch'), 'w') as f:
+        with open(os.path.join(d, 'static_board.launch.gen'), 'w') as f:
             f.write('<launch>\n')
             for name, p in pose.items():
                 f.write('  <node pkg="tf2_ros" type="static_transform_publisher" name="{}_broadcaster" args="{} {} {} {} {} {} {} {} {}" />\n'.format(

@@ -9,7 +9,7 @@
   </include>
 
   <node pkg="aruco_tf" name="build_robot_tfs" type="build_robot_transform.py" output="screen">
-    <param name="robot_frame" value="world" />
+    <param name="robot_frame" value="robot_base" />
     <param name="topic" value="/aruco_detection/aruco_detection_node/detections" />
     <param name="output_dir" value="$(find aruco_tf)/data/robot_cal" />
     <rosparam command="load" ns="ref_pose" file="$(find aruco_tf)/data/robot_cal/$(arg cal_file)" />

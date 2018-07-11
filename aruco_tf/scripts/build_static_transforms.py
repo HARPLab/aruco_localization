@@ -47,16 +47,16 @@ class StaticOffsetCollector:
         
     def do_update(self, pose, ref_pose):
         t = [ pose.pose.position.x, pose.pose.position.y, pose.pose.position.z ]
-        q = [ pose.pose.orientation.w, pose.pose.orientation.x, pose.pose.orientation.y, pose.pose.orientation.z ]
+        q = [ pose.pose.orientation.x, pose.pose.orientation.y, pose.pose.orientation.z, pose.pose.orientation.w ]
         t_ref= [ ref_pose.pose.position.x, ref_pose.pose.position.y, ref_pose.pose.position.z ]
-        q_ref = [ ref_pose.pose.orientation.w, ref_pose.pose.orientation.x, ref_pose.pose.orientation.y, ref_pose.pose.orientation.z ]
+        q_ref = [ ref_pose.pose.orientation.x, ref_pose.pose.orientation.y, ref_pose.pose.orientation.z, ref_pose.pose.orientation.w ]
         
         T_pose = transform.quaternion_matrix(q)
         T_pose[0:3,3] = t
         
         T_ref = transform.quaternion_matrix(q_ref)
         T_ref[0:3,3] = t_ref
-        rospy.logdebug('{}: \n\tTref: {},\n\t Tpose: {}'.format(self.name, T_ref, T_pose))
+        rospy.loginfo('{}: \n\tTref: {},\n\t Tpose: {}'.format(self.name, T_ref, T_pose))
         T_ttl = np.dot(np.linalg.inv(T_ref), T_pose)
         
         self.translations.append(T_ttl[0:3,3].tolist())
@@ -133,7 +133,7 @@ class OffsetCollector:
         with open(os.path.join(d, 'pose.yaml'), 'wb') as f:
             yaml.dump(pose_raw, f)
             
-        with open(os.path.join(d, 'static_board.launch'), 'w') as f:
+        with open(os.path.join(d, 'static_board.launch.gen'), 'w') as f:
             f.write('<launch>\n')
             for name, p in pose.items():
                 f.write('  <node pkg="tf2_ros" type="static_transform_publisher" name="{}_broadcaster" args="{} {} {} {} {} {} {} {} {}" />\n'.format(
@@ -158,7 +158,15 @@ def main():
     topic = rospy.get_param('~topic')
     out_dir = rospy.get_param('~output_dir')
     
-    col = OffsetCollector(topic, ref_frame)
+    try:
+        end_cond = NumPointsEndCondition(rospy.get_param('~num_points'))
+    except KeyError:
+        try:
+            end_cond = TimeGapEndCondition(rospy.Duration.from_sec(rospy.get_param('~delay_time')))
+        except KeyError:
+            end_cond = TimeGapEndCondition(rospy.Duration.from_sec(3.))
+    
+    col = OffsetCollector(topic, ref_frame, end_cond)
     
     while not rospy.is_shutdown() and not col.is_finished():
         rospy.sleep(0.5)
