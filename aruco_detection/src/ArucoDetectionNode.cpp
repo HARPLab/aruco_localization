@@ -191,12 +191,6 @@ void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msg
 	cv::Mat rot;
 	cv::Rodrigues(rvec, rot);
 
-	cv::Mat rotate_to_sys = (cv::Mat_<double>(3,3) << 1.0, 0.0, 0.0,
-			0.0, -1.0, 0.0,
-			0.0, 0.0, -1.0);
-
-	rot = rot*rotate_to_sys.t();
-
 	pose.position.x = tvec.at<double>(0);
 	pose.position.y = tvec.at<double>(1);
 	pose.position.z = tvec.at<double>(2);
@@ -207,7 +201,10 @@ void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msg
 	tf2::Quaternion q;
 	mat.getRotation(q);
 
-	tf2::convert(q, pose.orientation);
+	pose.orientation.w = q.w();
+	pose.orientation.x = q.x();
+	pose.orientation.y = q.y();
+	pose.orientation.z = q.z();
 }
 
 struct ArucoDetectionNode {
@@ -343,10 +340,11 @@ struct ArucoDetectionNode {
 
 			if (build_marked_image) {
 				//show input with augmented information
+				cv::aruco::drawAxis(resultImg, this->cam_matrix, this->dist_coeffs, cv::Mat::zeros(1, 3, CV_64F), cv::Mat::zeros(1, 3, CV_64F), 0.1);
 				cv_bridge::CvImage out_msg;
 				out_msg.header.frame_id = msg->header.frame_id;
 				out_msg.header.stamp = msg->header.stamp;
-				out_msg.encoding = sensor_msgs::image_encodings::RGB8;
+				out_msg.encoding = sensor_msgs::image_encodings::BGR8;
 				out_msg.image = resultImg;
 				image_pub.publish(out_msg.toImageMsg());
 			}
