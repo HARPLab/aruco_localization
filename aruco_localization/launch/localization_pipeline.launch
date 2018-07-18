@@ -1,5 +1,22 @@
 <launch>
-  <include file="$(find aruco_detection)/launch/video_playback.launch" />
+  <arg name="camera_name" default="pupil_world" />
+  <arg name="visualize" default="false" />
+  <arg name="video_stream_provider" default="$(find aruco_detection)/data/world.mp4" />
+  <arg name="localization_type" default="builtin" />
+
+  <include file="$(find aruco_detection)/launch/video_playback.launch">
+    <arg name="camera_name" value="$(arg camera_name)" />
+    <arg name="visualize" value="$(arg visualize)" />
+    <arg name="video_stream_provider" default="$(arg video_stream_provider)" />
+  </include>
+  
   <include file="$(find aruco_tf)/launch/static_board.launch" />
-  <include file="$(find aruco_localization)/launch/aruco_localization.launch" />
+
+  <include if="$(eval arg('localization_type')=='builtin')" file="$(find aruco_localization)/launch/aruco_localization.launch">
+    <arg name="camera_name" value="$(arg camera_name)" />
+  </include>
+  <include if="$(eval arg('localization_type')=='robot_localization')" file="$(find aruco_localization)/launch/robot_localization.launch">
+    <arg name="camera_name" value="$(arg camera_name)" />
+  </include>
+
 </launch>

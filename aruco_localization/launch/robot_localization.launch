@@ -1,0 +1,30 @@
+ <launch>
+  <arg name="camera_name" default="pupil_world" />
+  <arg name="ref_frame" default="robot_base" />
+  <arg name="aruco_board_topic" default="/aruco_detection/aruco_detection_node/boards" />
+ 
+  <node pkg="robot_localization" type="ekf_localization_node" name="$(arg camera_name)_localization">
+    <param name="frequency" value="10." />
+    <param name="sensor_timeout" value="2." />
+    <param name="two_d_mode" value="false" />
+    <param name="odom_frame" value="$(arg ref_frame)" />
+    <param name="base_link_frame" value="$(arg camera_name)" />
+    <param name="world_frame" value="$(arg ref_frame)" />
+    
+    <param name="pose0" value="$(arg aruco_board_topic)/table_grid" />
+    <rosparam param="pose0_config">[true, true, true, true, true, true,
+    false, false, false, false, false, false,
+    false, false, false]
+    </rosparam>
+    <param name="pose0_queue_size" value="5" />
+    <param name="pose0_differential" value="false" />
+    <param name="pose0_relative" value="false" />
+    
+    <rosparam param="initial_state">[0.313, 0.365, 0.523, -1.949, 0.082, 3.139,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    0.0, 0.0, 0.0]
+    </rosparam>
+  </node>
+
+ </launch>
+ 

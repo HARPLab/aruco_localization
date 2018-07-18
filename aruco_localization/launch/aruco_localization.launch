@@ -1,7 +1,11 @@
 <launch>
+  <arg name="camera_name" default="pupil_world" />
+  <arg name="ref_frame" default="robot_base" />
+  <arg name="aruco_detection_topic" default="/aruco_detection/aruco_detection_node/detections" />
+  
   <node pkg="aruco_localization" type="aruco_localization_node" name="aruco_localization_node" output="screen">
-    <param name="camera_name" value="pupil_world" />
-    <param name="ref_frame" value="robot_base" />
-    <param name="aruco_detection_topic" value="/aruco_detection/aruco_detection_node/detections" />
+    <param name="camera_name" value="$(arg camera_name)" />
+    <param name="ref_frame" value="$(arg ref_frame)" />
+    <param name="aruco_detection_topic" value="$(arg aruco_detection_topic)" />
   </node>
 </launch>
