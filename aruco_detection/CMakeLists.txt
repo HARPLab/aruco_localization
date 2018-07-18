@@ -7,7 +7,9 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   message_generation
   image_transport
-  cv_bridge)
+  cv_bridge
+  tf2
+  tf2_geometry_msgs)
 
 find_package(OpenCV REQUIRED COMPONENTS aruco)
 message(STATUS "${OpenCV_INCLUDE_DIRS}")

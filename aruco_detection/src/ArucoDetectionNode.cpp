@@ -21,6 +21,7 @@
 #include <sensor_msgs/image_encodings.h>
 #include <tf2/convert.h>
 #include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <XmlRpcValue.h>
 
@@ -209,6 +210,8 @@ void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msg
 	pose.orientation.z = q.z();
 }
 
+
+
 struct ArucoDetectionNode {
 	private:
 		bool useRectifiedImages;
@@ -337,10 +340,23 @@ struct ArucoDetectionNode {
 						// publish this board
 						ros::Publisher & pub = this->pose_publishers[board.name];
 						if (pub.getNumSubscribers() > 0) {
+							// Convert it into a frame that we actually care about
+
 							geometry_msgs::PoseWithCovarianceStamped pose_stamped;
 							pose_stamped.pose = board_msg.pose;
 							pose_stamped.header = boards.header;
-							pub.publish(pose_stamped);
+							// We want the vector from the board to the image frame, not from the image frame to the board
+							// So invert this pose and fix the frame id
+							tf2::Transform t;
+							tf2::fromMsg(pose_stamped.pose.pose, t);
+							tf2::toMsg(t.inverse(), pose_stamped.pose.pose);
+
+							pose_stamped.header.frame_id = board.name;
+							try {
+								pub.publish(pose_stamped);
+							} catch (tf2::TransformException & ex) {
+								ROS_WARN_STREAM("Failed to transform message to frame: " << ex.what());
+							}
 						}
 
 
