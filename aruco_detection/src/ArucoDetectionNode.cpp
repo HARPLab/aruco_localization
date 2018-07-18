@@ -26,6 +26,8 @@
 
 #include <boost/filesystem.hpp>
 
+
+#include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <aruco_detection/Boards.h>
 
 const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> aruco_dict_lookup {
@@ -224,6 +226,8 @@ struct ArucoDetectionNode {
 		image_transport::ImageTransport it;
 		image_transport::Subscriber image_sub;
 
+		std::map<std::string, ros::Publisher> pose_publishers;
+
 
 	public:
 		ArucoDetectionNode()
@@ -246,6 +250,10 @@ struct ArucoDetectionNode {
 				std::for_each(this->boards.begin(), this->boards.end(),
 						[] (ArucoBoard const & board) {
 					ROS_INFO_STREAM("\t" << board.name);
+				});
+
+				std::transform(this->boards.begin(), this->boards.end(), std::inserter(this->pose_publishers, this->pose_publishers.end()), [this] (ArucoBoard const & board) {
+					return std::make_pair(board.name, this->nh.advertise<geometry_msgs::PoseWithCovarianceStamped>(std::string("boards/" + board.name), 1));
 				});
 		}
 
@@ -325,6 +333,15 @@ struct ArucoDetectionNode {
 							0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
 							0.0, 0.0, 0.0, 0.0, 0.0, 0.001,
 						}; // TODO: something smarter with this
+
+						// publish this board
+						ros::Publisher & pub = this->pose_publishers[board.name];
+						if (pub.getNumSubscribers() > 0) {
+							geometry_msgs::PoseWithCovarianceStamped pose_stamped;
+							pose_stamped.pose = board_msg.pose;
+							pose_stamped.header = boards.header;
+							pub.publish(pose_stamped);
+						}
 
 
 						if (build_marked_image) {
