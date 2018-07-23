@@ -23,6 +23,7 @@ struct CameraModel : public image_geometry::PinholeCameraModel {
 public:
 	CameraModel(sensor_msgs::CameraInfo const & msg);
 	void rectifyImage(cv::Mat const & raw, cv::Mat & rectified, int interpolation = cv::INTER_LINEAR) const;
+	cv::Point2d unrectifyPoint(const cv::Point2d& uv_rect) const;
 	void initRectificationMapsFisheye() const;
 
 };

@@ -43,8 +43,8 @@ void CameraModel::initRectificationMapsFisheye() const {
 	/// Make sure we're handling that 100% correctly.
 
 	// we should ONLY be here if we're explicitly using the fisheye calibration model
-	if (cache_->distortion_state != image_geometry::UNKNOWN ||
-			this->cam_info_.distortion_model != "equidistant") {
+	if (cache_->distortion_state != image_geometry::UNKNOWN
+			|| this->cam_info_.distortion_model != "equidistant") {
 		throw image_geometry::Exception("not a fisheye calibration!");
 	}
 
@@ -131,6 +131,27 @@ void CameraModel::rectifyImage(const cv::Mat& raw, cv::Mat& rectified,
 			cv::remap(raw, rectified, this->cache_->reduced_map1,
 					this->cache_->reduced_map2, interpolation);
 		}
+	}
+}
+
+cv::Point2d CameraModel::unrectifyPoint(const cv::Point2d& uv_rect) const {
+	try {
+		return this->PinholeCameraModel::unrectifyPoint(uv_rect);
+	} catch (image_geometry::Exception & ex) {
+		if (cache_->distortion_state != image_geometry::UNKNOWN
+				|| this->cam_info_.distortion_model != "equidistant") {
+			throw image_geometry::Exception("not a fisheye calibration!");
+		}
+		cv::Point3d ray = projectPixelTo3dRay(uv_rect);
+
+		// Project the ray on the image
+		cv::Mat r_vec, t_vec = cv::Mat_<double>::zeros(3, 1);
+		cv::Rodrigues(R_.t(), r_vec);
+		std::vector<cv::Point2d> image_point;
+		cv::fisheye::projectPoints(std::vector<cv::Point3d>(1, ray), r_vec,
+				t_vec, K_, D_, image_point);
+
+		return image_point[0];
 	}
 }
 

@@ -68,8 +68,10 @@ include_directories(
 add_library(aruco_detection
     include/aruco_detection/CameraModel.hpp
     include/aruco_detection/ArucoBoard.hpp
+    include/aruco_detection/ArucoDetector.hpp
     src/CameraModel.cpp
-    src/ArucoBoard.cpp)
+    src/ArucoBoard.cpp
+    src/ArucoDetector.cpp)
 
 add_executable(aruco_detection_node
     src/ArucoDetectionNode.cpp

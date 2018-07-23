@@ -12,7 +12,6 @@
 #include <sstream>
 
 #include <opencv2/core/core.hpp>
-#include <opencv2/aruco.hpp>
 #include <opencv2/calib3d.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
@@ -31,163 +30,9 @@
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <aruco_detection/Boards.h>
 
-const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> aruco_dict_lookup {
-	    {"DICT_4X4_50", cv::aruco::DICT_4X4_50},
-	    {"DICT_4X4_100", cv::aruco::DICT_4X4_100},
-	    {"DICT_4X4_250", cv::aruco::DICT_4X4_250},
-	    {"DICT_4X4_1000", cv::aruco::DICT_4X4_1000},
-	    {"DICT_5X5_50", cv::aruco::DICT_5X5_50},
-	    {"DICT_5X5_100", cv::aruco::DICT_5X5_100},
-	    {"DICT_5X5_250", cv::aruco::DICT_5X5_250},
-	    {"DICT_5X5_1000", cv::aruco::DICT_5X5_1000},
-	    {"DICT_6X6_50", cv::aruco::DICT_6X6_50},
-	    {"DICT_6X6_100", cv::aruco::DICT_6X6_100},
-	    {"DICT_6X6_250", cv::aruco::DICT_6X6_250},
-	    {"DICT_6X6_1000", cv::aruco::DICT_6X6_1000},
-	    {"DICT_7X7_50", cv::aruco::DICT_7X7_50},
-	    {"DICT_7X7_100", cv::aruco::DICT_7X7_100},
-	    {"DICT_7X7_250", cv::aruco::DICT_7X7_250},
-	    {"DICT_7X7_1000", cv::aruco::DICT_7X7_1000},
-	    {"DICT_ARUCO_ORIGINAL", cv::aruco::DICT_ARUCO_ORIGINAL} };
+#include "../include/aruco_detection/ArucoBoard.hpp"
 
-struct ArucoBoard {
-	std::string name;
-
-#if CV_VERSION_MAJOR >= 3 and CV_VERSION_MINOR >= 2
-	typedef cv::Ptr<cv::aruco::Dictionary> DictType;
-	typedef cv::Ptr<cv::aruco::Board> BoardType;
-#define CV_ARUCO_ADV
-#else
-	typedef cv::aruco::Dictionary DictType;
-	typedef cv::aruco::Board BoardType;
-#endif
-
-	BoardType board;
-
-	DictType const & get_dict() const {
-#ifdef CV_ARUCO_ADV
-		return this->board->dictionary;
-#else // CV_ARUCO_ADV
-		return this->board.dictionary;
-#endif // CV_ARUCO_ADV
-	}
-
-
-
-	static DictType getPredefinedDictionaryFromName(std::string const & name) {
-		try {
-			return cv::aruco::getPredefinedDictionary(aruco_dict_lookup.at(name));
-		} catch (std::out_of_range & e) {
-			throw std::out_of_range(std::string("No such dictionary name: ") + name);
-		}
-	}
-
-	static ArucoBoard load_from_file(std::string const & filename) {
-		ROS_INFO_STREAM("Reading from file " << filename);
-
-		ArucoBoard board;
-
-		cv::FileStorage fs(cv::String(filename.c_str()), cv::FileStorage::READ );
-		ROS_INFO_STREAM("File opened " << filename.c_str());
-
-		cv::FileNode root = fs.getFirstTopLevelNode();
-		for (auto it = root.begin(); it != root.end(); ++it) {
-			ROS_INFO_STREAM( "node: " << (*it).name() << ": " << (*it).type());
-		}
-
-		std::string const dict = fs["dictionary"];
-		ROS_INFO_STREAM("Read dictionary " << dict);
-		int const marker_x = fs["marker_x"];
-		int const marker_y = fs["marker_y"];
-		double const marker_len = fs["marker_length"];
-		double const marker_sep = fs["marker_separation"];
-
-		cv::String name;
-		cv::read(fs["name"], name, boost::filesystem::path(filename).stem().native());
-
-		board.name = cv::String(fs["name"]).c_str();
-		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict));
-
-		return board;
-	}
-
-	static std::vector<ArucoBoard> load_from_directory(std::string const & dir_name) {
-		namespace fs = boost::filesystem;
-		std::vector<ArucoBoard> boards;
-		// this wants to be transform_if but that doesn't exist because ranges aren't ready yet :(
-		std::for_each( fs::directory_iterator(fs::path(dir_name)), fs::directory_iterator(),
-				[&boards] (fs::directory_entry const & entry) {
-			if (fs::is_regular_file(entry.status())) {
-				boards.push_back(ArucoBoard::load_from_file(entry.path().native()));
-			}
-		});
-
-		return boards;
-	}
-
-	static ArucoBoard load_from_param_ns(ros::NodeHandle const & nh, std::string const & name, std::string const & prefix = "~") {
-		ArucoBoard board;
-
-		std::string dict;
-		int marker_x, marker_y, start_id;
-		double marker_len, marker_sep;
-
-		std::string const full_prefix = prefix + "/" + name + "/";
-
-		ROS_DEBUG_STREAM("Building board for " << full_prefix);
-
-		nh.getParam(full_prefix + "dictionary", dict);
-		nh.getParam(full_prefix + "marker_x", marker_x);
-		nh.getParam(full_prefix + "marker_y", marker_y);
-		nh.getParam(full_prefix + "marker_length", marker_len);
-		nh.getParam(full_prefix + "marker_separation", marker_sep);
-		if (nh.hasParam(full_prefix + "start_id")) {
-			nh.getParam(full_prefix + "start_id", start_id);
-		} else {
-			start_id = 0;
-		}
-
-		board.name = name;
-
-#ifdef CV_ARUCO_ADV
-		board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict), start_id);
-#else // CV_ARUCO_ADV
-		if (start_id != 0) {
-			ROS_WARN("OpenCV version does not allow start_id!");
-		} else {
-			board.board = cv::aruco::GridBoard::create(marker_x, marker_y, marker_len, marker_sep, ArucoBoard::getPredefinedDictionaryFromName(dict));
-		}
-#endif // CV_ARUCO_ADV
-		return board;
-	}
-
-	static std::vector<ArucoBoard> load_from_params(ros::NodeHandle const & nh) {
-//		std::vector<std::string> topics;
-		XmlRpc::XmlRpcValue topics;
-		typedef std::pair<std::string, XmlRpc::XmlRpcValue> PairType;
-		nh.getParam("board", topics);
-
-		ROS_DEBUG("Found boards:");
-		std::for_each(topics.begin(), topics.end(), [] (PairType const & pair) {
-			ROS_DEBUG_STREAM("\t" << pair.first);
-		});
-
-		ROS_DEBUG("Building boards...");
-		std::vector<ArucoBoard> boards;
-		std::transform(
-				topics.begin(),
-				topics.end(),
-				std::back_inserter(boards),
-				[&nh] ( PairType const & pair) {
-			return ArucoBoard::load_from_param_ns(nh, pair.first, "board");
-		});
-
-		return boards;
-	}
-
-};
-
-
+namespace aruco {
 
 void convert_cv_to_ros( cv::Mat const & rvec, cv::Mat const & tvec, geometry_msgs::Pose & pose)
 {
@@ -410,12 +255,14 @@ struct ArucoDetectionNode {
 		}
 };
 
+} // namespace aruco
+
 
 int main(int argc,char **argv)
 {
 	ros::init(argc, argv, "aruco_detection_node");
 
-	ArucoDetectionNode node;
+	aruco::ArucoDetectionNode node;
 
 	ros::spin();
 }
