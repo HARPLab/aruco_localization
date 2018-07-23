@@ -5,8 +5,10 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   geometry_msgs
+  sensor_msgs
   message_generation
   image_transport
+  image_geometry
   cv_bridge
   tf2
   tf2_geometry_msgs)
@@ -23,6 +25,7 @@ add_message_files(
 generate_messages(
     DEPENDENCIES
     std_msgs
+    sensor_msgs
     geometry_msgs
 )
 
@@ -57,15 +60,23 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
+  include
   ${OpenCV_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
 )
+
+add_library(aruco_detection
+    include/aruco_detection/CameraModel.hpp
+    include/aruco_detection/ArucoBoard.hpp
+    src/CameraModel.cpp
+    src/ArucoBoard.cpp)
 
 add_executable(aruco_detection_node
     src/ArucoDetectionNode.cpp
     )
     
 target_link_libraries(aruco_detection_node
+    aruco_detection
     ${catkin_LIBRARIES}
     ${OpenCV_LIBRARIES}
 )
