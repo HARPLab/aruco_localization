@@ -1,10 +1,15 @@
 <launch>
+   <arg name="camera_name" default="pupil_world" />
+   <arg name="visualize" default="false" />
+   <arg name="record" default="false" />
+   <arg name="video_stream_provider" default="$(find aruco_detection)/data/world.mp4" />
+
    <!-- launch video stream -->
    <include file="$(find video_stream_opencv)/launch/camera.launch" >
         <!-- node name and ros graph name -->
-        <arg name="camera_name" value="pupil_world" />
+        <arg name="camera_name" value="$(arg camera_name)" />
         <!-- means video device 0, /dev/video0 -->
-        <arg name="video_stream_provider" value="$(find aruco_detection)/data/world.mp4" />
+        <arg name="video_stream_provider" value="$(arg video_stream_provider)" />
         <!-- set camera fps to (if the device allows) -->
         <arg name="set_camera_fps" value="2"/>
         <!-- set buffer queue size of frame capturing to -->
@@ -25,9 +30,9 @@
    </include>
    
    <include file="$(find aruco_detection)/launch/aruco_detector.launch">
-     <arg name="image_topic" value="/pupil_world" />
-     <arg name="visualize" value="true" />
-     <arg name="record" value="false" />
+     <arg name="image_topic" value="/$(arg camera_name)" />
+     <arg name="visualize" value="$(arg visualize)" />
+     <arg name="record" value="$(arg record)" />
    </include>
      
    

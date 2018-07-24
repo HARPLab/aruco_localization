@@ -1,6 +1,6 @@
 #include "aruco_detection/CameraModel.hpp"
 #include <sensor_msgs/distortion_models.h>
-
+#include <ros/ros.h>
 namespace image_geometry {
 
 // copied from image_geometry/pinhole_camera_model.cpp
@@ -32,10 +32,7 @@ namespace aruco {
 
 CameraModel::CameraModel(sensor_msgs::CameraInfo const & msg) :
 		image_geometry::PinholeCameraModel() {
-	bool loaded = this->fromCameraInfo(msg);
-	if (!loaded) {
-		throw std::runtime_error("Failed to load info from CameraInfo message");
-	}
+	this->fromCameraInfo(msg);
 }
 
 void CameraModel::initRectificationMapsFisheye() const {
@@ -113,6 +110,23 @@ void CameraModel::initRectificationMapsFisheye() const {
 	}
 }
 
+cv::Point2d CameraModel::rectifyPoint(cv::Point2d const & uv_raw) const {
+	try {
+		return this->PinholeCameraModel::rectifyPoint(uv_raw);
+	} catch (image_geometry::Exception &) {
+		if (this->cam_info_.distortion_model == "equidistant") {
+			/// @todo cv::undistortPoints requires the point data to be float, should allow double
+			cv::Point2f raw32 = uv_raw, rect32;
+			const cv::Mat src_pt(1, 1, CV_32FC2, &raw32.x);
+			cv::Mat dst_pt(1, 1, CV_32FC2, &rect32.x);
+			cv::fisheye::undistortPoints(src_pt, dst_pt, K_, D_, R_, P_);
+			return rect32;
+		} else {
+			throw;
+		}
+	}
+}
+
 void CameraModel::rectifyImage(const cv::Mat& raw, cv::Mat& rectified,
 		int interpolation) const {
 
@@ -134,25 +148,18 @@ void CameraModel::rectifyImage(const cv::Mat& raw, cv::Mat& rectified,
 	}
 }
 
-cv::Point2d CameraModel::unrectifyPoint(const cv::Point2d& uv_rect) const {
-	try {
-		return this->PinholeCameraModel::unrectifyPoint(uv_rect);
-	} catch (image_geometry::Exception & ex) {
-		if (cache_->distortion_state != image_geometry::UNKNOWN
-				|| this->cam_info_.distortion_model != "equidistant") {
-			throw image_geometry::Exception("not a fisheye calibration!");
-		}
-		cv::Point3d ray = projectPixelTo3dRay(uv_rect);
+cv::Point2d CameraModel::projectPoint(cv::Mat const & rvec, cv::Mat const & tvec, const cv::Point3d& point3) const {
 
-		// Project the ray on the image
-		cv::Mat r_vec, t_vec = cv::Mat_<double>::zeros(3, 1);
-		cv::Rodrigues(R_.t(), r_vec);
-		std::vector<cv::Point2d> image_point;
-		cv::fisheye::projectPoints(std::vector<cv::Point3d>(1, ray), r_vec,
-				t_vec, K_, D_, image_point);
-
-		return image_point[0];
+	std::vector<cv::Point2d> image_point;
+	if (this->cam_info_.distortion_model == "equidistant") {
+		cv::fisheye::projectPoints(std::vector<cv::Point3d>(1, point3), image_point, rvec,
+			tvec, K_, D_);
+	} else {
+		cv::projectPoints(std::vector<cv::Point3d>(1, point3), image_point, rvec,
+			tvec, K_, D_);
 	}
+
+	return image_point[0];
 }
 
 } // namespace aruco

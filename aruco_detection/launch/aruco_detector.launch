@@ -12,14 +12,12 @@
 	    <rosparam command="load" ns="board/back_grid" file="$(find aruco_detection)/config/boards/back_grid.yml" />
 	    <!-- <rosparam command="load" ns="board/big_grid" file="$(find aruco_detection)/config/boards/big_grid.yml" /> -->
 	    <rosparam command="load" ns="board/far_back_grid" file="$(find aruco_detection)/config/boards/far_back_grid.yml" />
-	    <rosparam command="load" ns="board/fridge_column_grid" file="$(find aruco_detection)/config/boards/fridge_column_grid.yml" />
+	    <!-- <rosparam command="load" ns="board/fridge_column_grid" file="$(find aruco_detection)/config/boards/fridge_column_grid.yml" /> -->
 	    
 	    <param name="image_is_rectified" value="false" />
+	    <param name="pose_ref_frame" value="robot_base" />
 	  </node>
 	  
-	  <node if="$(arg visualize)" name="aruco_detection_img" pkg="image_view" type="image_view">
-	  	<remap from="image" to="$(arg image_topic)/image_raw" />
-	  </node>
 	  <node if="$(arg visualize)" name="aruco_detection_viz" pkg="image_view" type="image_view">
 	  	<remap from="image" to="aruco_detection_node/result" />
 	  </node>

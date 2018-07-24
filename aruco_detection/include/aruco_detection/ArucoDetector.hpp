@@ -56,6 +56,9 @@ struct ArucoDetector {
 
 		DetectorParamsType detector_params;
 
+		inline std::vector<ArucoBoard> const & get_boards() const { return this->boards; }
+		inline bool is_initialized() const { return static_cast<bool>(this->cameraModel); }
+
 	private:
 		bool const useRectifiedImages;
 		std::vector<ArucoBoard> const boards;

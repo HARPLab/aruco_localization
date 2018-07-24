@@ -68,19 +68,19 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 		bool const debug_image) const {
 	DetectionResult result;
 
-	if (this->useRectifiedImages && !this->cameraModel) {
+	if (!this->is_initialized()) {
 		throw std::runtime_error("No camera info received!");
 	}
 
 	cv::Mat ref_image;
-	if (this->useRectifiedImages) {
+	if (!this->useRectifiedImages) {
 		this->cameraModel->rectifyImage(image, ref_image);
 	} else {
 		ref_image = image;
 	}
 
 	if (debug_image) {
-		result.debugImage = image.clone();
+		result.debugImage = ref_image.clone();
 	}
 
 	std::transform(this->boards.begin(), this->boards.end(),
@@ -113,7 +113,6 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 						cv::Mat rot;
 						cv::Rodrigues(rvec, rot);
 
-						;
 						detection.transform = tf2::Transform(
 								tf2::Matrix3x3(
 										rot.at<double>(0), rot.at<double>(1), rot.at<double>(2),
@@ -133,15 +132,15 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 
 						if (debug_image) {
 							// project axis points
-							cv::Point2d origin = this->cameraModel->unrectifyPoint(this->cameraModel->project3dToPixel(cv::Point3f(0, 0, 0)));
-							cv::Point2d ax_x = this->cameraModel->unrectifyPoint(this->cameraModel->project3dToPixel(cv::Point3f(0.1, 0, 0)));
-							cv::Point2d ax_y = this->cameraModel->unrectifyPoint(this->cameraModel->project3dToPixel(cv::Point3f(0, 0.1, 0)));
-							cv::Point2d ax_z = this->cameraModel->unrectifyPoint(this->cameraModel->project3dToPixel(cv::Point3f(0, 0, 0.2)));
+							cv::Point2d origin = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0)));
+							cv::Point2d ax_x = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0.1, 0, 0)));
+							cv::Point2d ax_y = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0.1, 0)));
+							cv::Point2d ax_z = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0.1)));
 
 							// draw axis lines
 							cv::line(result.debugImage, origin, ax_x, cv::Scalar(0, 0, 255), 3);
-							cv::line(result.debugImage, origin, ax_y, cv::Scalar(0, 0, 255), 3);
-							cv::line(result.debugImage, origin, ax_z, cv::Scalar(0, 0, 255), 3);
+							cv::line(result.debugImage, origin, ax_y, cv::Scalar(0, 255, 0), 3);
+							cv::line(result.debugImage, origin, ax_z, cv::Scalar(255, 0, 0), 3);
 						}
 					}
 
