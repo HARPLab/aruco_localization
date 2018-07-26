@@ -8,6 +8,7 @@
 #include "aruco_detection/ArucoDetector.hpp"
 
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <boost/make_shared.hpp>
 
 namespace aruco {
 
@@ -30,6 +31,10 @@ geometry_msgs::PoseWithCovariance DetectionResult::BoardDetection::asPose(bool i
 	}
 	pose.covariance = this->covariance;
 	return pose;
+}
+
+geometry_msgs::PoseWithCovariancePtr DetectionResult::BoardDetection::asPosePtr(bool invert) const {
+	return boost::make_shared<geometry_msgs::PoseWithCovariance>(this->asPose(invert));
 }
 
 

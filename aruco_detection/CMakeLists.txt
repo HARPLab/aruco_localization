@@ -14,7 +14,6 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs)
 
 find_package(OpenCV REQUIRED COMPONENTS aruco)
-message(STATUS "${OpenCV_INCLUDE_DIRS}")
 
 ## Generate added messages and services with any dependencies listed here
 add_message_files(
@@ -50,7 +49,10 @@ endif()
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
+  INCLUDE_DIRS include
+  LIBRARIES ${project_name}
   CATKIN_DEPENDS message_runtime
+  DEPENDS OpenCV
 )
 
 ###########
@@ -65,7 +67,7 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
-add_library(aruco_detection
+add_library(${PROJECT_NAME}
     include/aruco_detection/CameraModel.hpp
     include/aruco_detection/ArucoBoard.hpp
     include/aruco_detection/ArucoDetector.hpp
@@ -78,17 +80,7 @@ add_executable(aruco_detection_node
     )
     
 target_link_libraries(aruco_detection_node
-    aruco_detection
+    ${PROJECT_NAME}
     ${catkin_LIBRARIES}
     ${OpenCV_LIBRARIES}
 )
-
-#add_custom_target(${PROJECT_NAME}_data ALL
-#    COMMAND ${CMAKE_COMMAND} -E copy_directory
-#            "${PROJECT_SOURCE_DIR}/data"
-#            "${OpenRAVE_DEVEL_DIR}/${OpenRAVE_DATA_DIR}"
-#)
-
-#install(DIRECTORY "${PROJECT_SOURCE_DIR}/data/"
-#    DESTINATION "${OpenRAVE_INSTALL_DIR}/${OpenRAVE_DATA_DIR}"
-#)

@@ -28,6 +28,7 @@ struct DetectionResult {
 
 		aruco_detection::Board asBoard() const;
 		geometry_msgs::PoseWithCovariance asPose(bool invert = false) const;
+		geometry_msgs::PoseWithCovariancePtr asPosePtr(bool invert = false) const;
 	};
 
 	cv::Mat debugImage;
@@ -46,7 +47,7 @@ struct ArucoDetector {
 
 		void update_camera_info(const sensor_msgs::CameraInfo & cam_info);
 
-		DetectionResult detect(cv::Mat const & image, bool const debug_image) const;
+		DetectionResult detect(cv::Mat const & image, bool const debug_image = false) const;
 
 #ifdef CV_ARUCO_ADV
 	typedef cv::Ptr<cv::aruco::DetectorParameters> DetectorParamsType;
