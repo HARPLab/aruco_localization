@@ -50,8 +50,8 @@ endif()
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
   INCLUDE_DIRS include
-  LIBRARIES ${project_name}
-  CATKIN_DEPENDS message_runtime
+  LIBRARIES ${PROJECT_NAME}
+  CATKIN_DEPENDS message_runtime image_geometry
   DEPENDS OpenCV
 )
 
