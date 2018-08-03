@@ -127,6 +127,23 @@ cv::Point2d CameraModel::rectifyPoint(cv::Point2d const & uv_raw) const {
 	}
 }
 
+std::vector<cv::Point2d> CameraModel::rectifyPoints(std::vector<cv::Point2d> const & uv_raw) const {
+	std::vector<cv::Point2d> out_pts;
+	try {
+		std::transform(uv_raw.begin(), uv_raw.end(), std::back_inserter(out_pts), [this] (cv::Point2d const & pt) {
+			return this->PinholeCameraModel::rectifyPoint(pt);
+		} );
+		return out_pts;
+	} catch (image_geometry::Exception &) {
+		if (this->cam_info_.distortion_model == "equidistant") {
+			/// @todo cv::undistortPoints requires the point data to be float, should allow double
+			cv::fisheye::undistortPoints(uv_raw, out_pts, K_, D_, R_, P_);
+			return out_pts;
+		} else {
+			throw;
+		}
+	}
+}
 void CameraModel::rectifyImage(const cv::Mat& raw, cv::Mat& rectified,
 		int interpolation) const {
 

@@ -46,6 +46,7 @@ struct ArucoDetector {
 		ArucoDetector( std::vector<ArucoBoard> const & boards, bool const useRectifiedImages );
 
 		void update_camera_info(const sensor_msgs::CameraInfo & cam_info);
+		inline CameraModel const & get_camera_model() const { return *cameraModel; }
 
 		DetectionResult detect(cv::Mat const & image, bool const debug_image = false) const;
 
