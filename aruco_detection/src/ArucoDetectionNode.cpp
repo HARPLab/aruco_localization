@@ -52,7 +52,8 @@ public:
 		std::string const topic = this->nh.resolveName("/image");
 		ROS_INFO_STREAM("Subscribing to image topic " << topic);
 
-		this->image_sub = this->it.subscribe(topic + "/image_raw", 1,
+		std::string const image_topic_name = getParam<std::string>(this->nh, "image_topic_name", "image_raw");
+		this->image_sub = this->it.subscribe(topic + "/" + image_topic_name, 1,
 				&ArucoDetectionNode::image_callback, this);
 		this->cam_info_sub = this->nh.subscribe(topic + "/camera_info", 1,
 				&ArucoDetectionNode::cam_info_callback, this);

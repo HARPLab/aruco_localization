@@ -7,6 +7,7 @@
   <group ns="aruco_detection">
 	  <node pkg="aruco_detection" name="aruco_detection_node" type="aruco_detection_node" output="screen" >
 	    <remap from="/image" to="$(arg image_topic)" />
+	    <param name="image_topic_name" value="image_color" />
 	  
 	    <rosparam command="load" ns="board/table_grid" file="$(find aruco_detection)/config/boards/table_grid.yml" />
 	    <rosparam command="load" ns="board/back_grid" file="$(find aruco_detection)/config/boards/back_grid.yml" />
