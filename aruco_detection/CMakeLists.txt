@@ -11,7 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   image_geometry
   cv_bridge
   tf2
-  tf2_geometry_msgs)
+  tf2_geometry_msgs
+)
 
 find_package(OpenCV REQUIRED COMPONENTS aruco)
 
@@ -75,12 +76,19 @@ add_library(${PROJECT_NAME}
     src/ArucoBoard.cpp
     src/ArucoDetector.cpp)
 
+target_link_libraries(${PROJECT_NAME}
+    ${catkin_LIBRARIES}
+    ${OpenCV_LIBRARIES}
+)
+    
+add_dependencies(${PROJECT_NAME}
+    ${PROJECT_NAME}_generate_messages_cpp
+    )
+
 add_executable(aruco_detection_node
     src/ArucoDetectionNode.cpp
     )
     
 target_link_libraries(aruco_detection_node
     ${PROJECT_NAME}
-    ${catkin_LIBRARIES}
-    ${OpenCV_LIBRARIES}
 )
