@@ -26,6 +26,9 @@ struct DetectionResult {
 		std::size_t num_detections;
 		std::size_t num_inliers;
 
+		std::vector< std::vector< cv::Point2f > > marker_corners;
+		std::vector< int > marker_ids;
+
 		aruco_detection::Board asBoard() const;
 		geometry_msgs::PoseWithCovariance asPose(bool invert = false) const;
 		geometry_msgs::PoseWithCovariancePtr asPosePtr(bool invert = false) const;

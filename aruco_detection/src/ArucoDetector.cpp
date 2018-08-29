@@ -92,27 +92,33 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 			std::back_inserter(result.detections),
 			[&] (ArucoBoard const & board) {
 
-				// Detect raw markers
-				std::vector< std::vector< cv::Point2f > > marker_corners;
-				std::vector< int > marker_ids;
-				std::vector< std::vector< cv::Point2f > > rejected_corners;
-
-				cv::aruco::detectMarkers(ref_image, board.get_dict(), marker_corners, marker_ids, detector_params, rejected_corners);
-				cv::aruco::refineDetectedMarkers(ref_image, board.board, marker_corners, marker_ids, rejected_corners);
-
 				DetectionResult::BoardDetection detection;
 				detection.name = board.name;
-				detection.num_detections = marker_ids.size();
+				// Detect raw markers
+				std::vector< std::vector< cv::Point2f > > rejected_corners;
+
+				cv::aruco::detectMarkers(ref_image, board.get_dict(), detection.marker_corners, detection.marker_ids, detector_params, rejected_corners);
+				cv::aruco::refineDetectedMarkers(ref_image, board.board, detection.marker_corners, detection.marker_ids, rejected_corners);
+
+				detection.num_detections = detection.marker_ids.size();
 				detection.num_inliers = 0;
 
 				if (debug_image) {
-					cv::aruco::drawDetectedMarkers(result.debugImage, marker_corners, marker_ids);
+					cv::aruco::drawDetectedMarkers(result.debugImage, detection.marker_corners, detection.marker_ids);
 				}
 
-				if (marker_ids.size() > 3) { // at least 3 detected points
+				if (detection.marker_ids.size() > 3) { // at least 3 detected points
 					cv::Mat rvec, tvec;// TODO: cache last position
-					detection.num_inliers = cv::aruco::estimatePoseBoard(marker_corners, marker_ids, board.board, this->cameraModel->fullIntrinsicMatrix(),
-							cv::Mat_<double>::zeros(4, 1), rvec, tvec);
+
+					// manually run estimatePoseBoard instead of calling the function so we can
+					// run getBoardObjAndImagePoints only once
+//					detection.num_inliers = cv::aruco::estimatePoseBoard(detection.marker_corners, detection.marker_ids, board.board, this->cameraModel->fullIntrinsicMatrix(),
+//							cv::Mat_<double>::zeros(4, 1), rvec, tvec);
+					cv::Mat obj_points, img_points;
+					cv::aruco::getBoardObjectAndImagePoints(board.board, detection.marker_corners, detection.marker_ids, obj_points, img_points);
+					cv::solvePnP(obj_points, img_points, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), rvec, tvec, false);
+					//TODO: cache previous solutions and use it to seed the current one
+					detection.num_inliers = obj_points.total()/4;
 
 					if (detection.num_inliers > 0) {
 						cv::Mat rot;
@@ -126,14 +132,23 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 								tf2::Vector3(
 										tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2)));
 
-						detection.covariance = boost::array<float, 36> {
-							0.001, 0.0, 0.0, 0.0, 0.0, 0.0,
-							0.0, 0.001, 0.0, 0.0, 0.0, 0.0,
-							0.0, 0.0, 0.001, 0.0, 0.0, 0.0,
-							0.0, 0.0, 0.0, 0.001, 0.0, 0.0,
-							0.0, 0.0, 0.0, 0.0, 0.001, 0.0,
-							0.0, 0.0, 0.0, 0.0, 0.0, 0.001,
-						}; // TODO: something smarter with this
+						// Compute detection covariance
+						cv::Mat img_points_proj, jacobian_full;
+						cv::projectPoints(obj_points, rvec, tvec, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), img_points_proj, jacobian_full);
+						cv::Mat jacobian(jacobian_full, cv::Range::all(), cv::Range(0, 6));
+						static cv::Mat const permutation = (cv::Mat_<double>(6,6) <<
+								0, 0, 0, 1, 0, 0,
+								0, 0, 0, 0, 1, 0,
+								0, 0, 0, 0, 0, 1,
+								1, 0, 0, 0, 0, 0,
+								0, 1, 0, 0, 0, 0,
+								0, 0, 1, 0, 0, 0
+							);
+						double const error = cv::norm(img_points, img_points_proj) * 2 / img_points.total();
+						cv::Mat cov = (jacobian.t()*jacobian).inv() * permutation * cv::norm(img_points, img_points_proj);
+						ROS_INFO_STREAM("Jacobian: " << jacobian << "\nError: " << error << "\nHessian: " << (jacobian.t()*jacobian).inv());
+
+						cov.copyTo(cv::Mat(6, 6, cv::DataType<decltype(detection.covariance)::value_type>::depth, detection.covariance.c_array()));
 
 						if (debug_image) {
 							// project axis points
