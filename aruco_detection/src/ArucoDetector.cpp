@@ -18,11 +18,16 @@ aruco_detection::Board DetectionResult::BoardDetection::asBoard() const {
 	board_msg.board_name = this->name;
 	board_msg.num_detections = this->num_detections;
 	board_msg.num_inliers = this->num_inliers;
-	board_msg.pose = this->asPose(false);
+	if (this->transform_computed) {
+		board_msg.pose = this->asPose(false);
+	}
 	return board_msg;
 }
 
 geometry_msgs::PoseWithCovariance DetectionResult::BoardDetection::asPose(bool invert) const {
+	if (this->num_inliers == 0) {
+		throw std::runtime_error("Transform was not computed");
+	}
 	geometry_msgs::PoseWithCovariance pose;
 	if (invert) {
 		pose.pose = tf2::toMsg(this->transform.inverse(), pose.pose);
@@ -68,6 +73,26 @@ ArucoDetector::ArucoDetector(std::vector<ArucoBoard> const & boards,
 #endif // CV_ARUCO_ADV
 				cameraModel() {
 }
+
+ArucoDetector::ArucoDetector(ArucoDetector const & other) :
+		boards(other.boards),
+		useRectifiedImages(other.useRectifiedImages),
+#ifdef CV_ARUCO_ADV
+		detector_params(new cv::aruco::DetectorParameters(*other.detector_params)),
+#else // CV_ARUCO_ADV
+		detector_params(other.detector_params),
+#endif // CV_ARUCO_ADV
+		cameraModel(std::unique_ptr<CameraModel const>(new CameraModel(*other.cameraModel)))
+	{}
+
+ArucoDetector::ArucoDetector(ArucoDetector && other) :
+		boards(std::move(other.boards)),
+		useRectifiedImages(std::move(other.useRectifiedImages)),
+		detector_params(std::move(other.detector_params)),
+		cameraModel(std::move(other.cameraModel))
+	{}
+
+
 
 DetectionResult ArucoDetector::detect(cv::Mat const & image,
 		bool const debug_image) const {
@@ -146,7 +171,6 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 							);
 						double const error = cv::norm(img_points, img_points_proj) * 2 / img_points.total();
 						cv::Mat cov = (jacobian.t()*jacobian).inv() * permutation * cv::norm(img_points, img_points_proj);
-						ROS_INFO_STREAM("Jacobian: " << jacobian << "\nError: " << error << "\nHessian: " << (jacobian.t()*jacobian).inv());
 
 						cov.copyTo(cv::Mat(6, 6, cv::DataType<decltype(detection.covariance)::value_type>::depth, detection.covariance.c_array()));
 
