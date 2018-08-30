@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   cv_bridge
   tf2
   tf2_geometry_msgs
+  camera_info_manager
 )
 
 find_package(OpenCV REQUIRED COMPONENTS aruco)
@@ -90,5 +91,13 @@ add_executable(aruco_detection_node
     )
     
 target_link_libraries(aruco_detection_node
+    ${PROJECT_NAME}
+)
+
+add_executable(covariance_estimator
+    src/StationaryVideoCovarianceEstimator.cpp
+    )
+    
+target_link_libraries(covariance_estimator
     ${PROJECT_NAME}
 )

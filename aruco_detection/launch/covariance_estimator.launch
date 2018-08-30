@@ -1,0 +1,10 @@
+<launch>
+
+
+  <node pkg="aruco_detection" name="covariance_estimator" type="covariance_estimator" output="screen" >
+    <rosparam command="load" ns="board/table_grid" file="$(find aruco_detection)/config/boards/table_grid.yml" />
+	<param name="camera_info_url" value="file:///$(find harplab_sensors)/config/pupil/world_fisheye.yaml" />
+	<param name="video_dir" value="$(find aruco_detection)/data/stationary_videos/pupil" />
+  </node>
+
+</launch>
