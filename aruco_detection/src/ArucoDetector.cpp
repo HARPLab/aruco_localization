@@ -18,7 +18,7 @@ aruco_detection::Board DetectionResult::BoardDetection::asBoard() const {
 	board_msg.board_name = this->name;
 	board_msg.num_detections = this->num_detections;
 	board_msg.num_inliers = this->num_inliers;
-	if (this->transform_computed) {
+	if (this->num_inliers > 0) {
 		board_msg.pose = this->asPose(false);
 	}
 	return board_msg;
