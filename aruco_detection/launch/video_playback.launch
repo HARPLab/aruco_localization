@@ -33,6 +33,7 @@
      <arg name="image_topic" value="/$(arg camera_name)" />
      <arg name="visualize" value="$(arg visualize)" />
      <arg name="record" value="$(arg record)" />
+     <arg name="image_subtopic" value="image_raw" />
    </include>
      
    
