@@ -100,7 +100,7 @@ public:
 
 		std::for_each(result.detections.begin(), result.detections.end(), [&msg, this] (DetectionResult::BoardDetection const & dxn) {
 			ros::Publisher & pub = this->pose_publishers[dxn.name];
-			if (pub.getNumSubscribers() > 0) {
+			if (pub.getNumSubscribers() > 0 && dxn.num_inliers > 0) {
 				// Convert it into a frame that we actually care about
 
 				geometry_msgs::PoseWithCovarianceStamped pose_stamped;
