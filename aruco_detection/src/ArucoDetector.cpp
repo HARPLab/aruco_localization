@@ -128,6 +128,18 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 				detection.num_detections = detection.marker_ids.size();
 				detection.num_inliers = 0;
 
+				// now filter out any detections that don't have valid board IDs
+				std::vector<int> bad_indices;
+				for (unsigned int i=0; i<detection.marker_ids.size(); ++i) {
+					if (!board.is_valid_id(detection.marker_ids[i])) {
+						bad_indices.push_back(i);
+					}
+				}
+				std::for_each(bad_indices.rbegin(), bad_indices.rend(), [&detection] (int bad_id) {
+					detection.marker_corners.erase(detection.marker_corners.begin()+bad_id);
+					detection.marker_ids.erase(detection.marker_ids.begin()+bad_id);
+				} );
+
 				if (debug_image) {
 					cv::aruco::drawDetectedMarkers(result.debugImage, detection.marker_corners, detection.marker_ids);
 				}

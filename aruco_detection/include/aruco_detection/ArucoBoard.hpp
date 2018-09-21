@@ -51,6 +51,10 @@ struct ArucoBoard {
 #endif // CV_ARUCO_ADV
 	}
 
+	inline bool is_valid_id(int id) const {
+		return std::any_of(board->ids.begin(), board->ids.end(), [id] (int val_id) { return id==val_id; } );
+	}
+
 	// Constructors
 	static ArucoBoard::DictType getPredefinedDictionaryFromName(std::string const & name);
 	static ArucoBoard load_from_param_ns(ros::NodeHandle const & nh, std::string const & name, std::string const & prefix = "~");
