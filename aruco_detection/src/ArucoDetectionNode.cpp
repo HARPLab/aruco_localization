@@ -92,6 +92,7 @@ public:
 				(this->image_pub.getNumSubscribers() > 0);
 
 		DetectionResult const result = this->detector.detect(cv_ptr->image, build_marked_image);
+		ROS_DEBUG("Tag detection complete");
 
 		ros::Time dxn_tm = ros::Time::now();
 		aruco_detection::Boards boards_msg = result.asBoards();
@@ -110,16 +111,20 @@ public:
 				pub.publish(pose_stamped);
 			}
 		});
+		ROS_DEBUG("Tags published");
 
 
 		if (build_marked_image) {
+			ROS_DEBUG("Building marked image");
 			//show input with augmented information
 			cv_bridge::CvImage out_msg;
 			out_msg.header.frame_id = msg->header.frame_id;
 			out_msg.header.stamp = msg->header.stamp;
 			out_msg.encoding = sensor_msgs::image_encodings::BGR8;
 			out_msg.image = result.debugImage;
+			ROS_DEBUG("Publishing marked image");
 			image_pub.publish(out_msg.toImageMsg());
+			ROS_DEBUG("Marked image published");
 		}
 
 		this->detection_pub.publish(boards_msg);
