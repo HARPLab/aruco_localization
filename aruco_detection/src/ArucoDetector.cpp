@@ -189,8 +189,7 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 						cov.copyTo(cv::Mat(6, 6, cv::DataType<decltype(detection.covariance)::value_type>::depth, detection.covariance.c_array()));
 
 						if (debug_image) {
-							ROS_DEBUG("Adding axis");
-							// project axis points
+
 							cv::Point2d origin = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0)));
 							cv::Point2d ax_x = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0.1, 0, 0)));
 							cv::Point2d ax_y = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0.1, 0)));
@@ -200,7 +199,6 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 							cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_x.x, ax_x.y), cv::Scalar(0, 0, 255), 3);
 							cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_y.x, ax_y.y), cv::Scalar(0, 255, 0), 3);
 							cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_z.x, ax_z.y), cv::Scalar(255, 0, 0), 3);
-							ROS_DEBUG("Axis done");
 						}
 					}
 
