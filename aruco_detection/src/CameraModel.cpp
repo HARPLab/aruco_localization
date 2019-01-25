@@ -172,8 +172,8 @@ cv::Point2d CameraModel::projectPoint(cv::Mat const & rvec, cv::Mat const & tvec
 		cv::fisheye::projectPoints(std::vector<cv::Point3d>(1, point3), image_point, rvec,
 			tvec, K_, D_);
 	} else {
-		cv::projectPoints(std::vector<cv::Point3d>(1, point3), image_point, rvec,
-			tvec, K_, D_);
+		cv::projectPoints(std::vector<cv::Point3d>(1, point3), rvec,
+			tvec, K_, D_, image_point);
 	}
 
 	return image_point[0];
