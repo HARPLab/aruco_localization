@@ -12,6 +12,7 @@
 #include <image_transport/image_transport.h>
 #include <cv_bridge/cv_bridge.h>
 #include <XmlRpcValue.h>
+#include <boost/filesystem.hpp>
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <aruco_detection/Boards.h>
@@ -42,15 +43,28 @@ private:
 
 	std::map<std::string, ros::Publisher> pose_publishers;
 
+	boost::filesystem::path const img_record_path;
+
 	ArucoDetector detector;
 
 public:
 	ArucoDetectionNode() :
 			nh("~"), it(nh), detector(ArucoBoard::load_from_params(this->nh),
-					getParam<bool>(this->nh, "image_is_rectified", true)) {
+					getParam<bool>(this->nh, "image_is_rectified", true)),
+					img_record_path(getParam<std::string>(this->nh, "image_record_path", "")) {
 
 		std::string const topic = this->nh.resolveName("/image");
 		ROS_INFO_STREAM("Subscribing to image topic " << topic);
+
+		if (!this->img_record_path.empty() ) {
+			if (boost::filesystem::exists(this->img_record_path)) {
+				ROS_INFO_STREAM("Logging images to " << this->img_record_path);
+			} else if (boost::filesystem::create_directory(this->img_record_path)) {
+				ROS_INFO_STREAM("Logging images to " << this->img_record_path << "(directory created)");
+			} else {
+				ROS_WARN_STREAM("Failed to create image directory " << this->img_record_path);
+			}
+		}
 
 		std::string const image_topic_name = getParam<std::string>(this->nh, "image_topic_name", "image_raw");
 		this->image_sub = this->it.subscribe(topic + "/" + image_topic_name, 1,
@@ -98,7 +112,6 @@ public:
 		aruco_detection::Boards boards_msg = result.asBoards();
 		boards_msg.header.stamp = msg->header.stamp;
 		boards_msg.header.frame_id = msg->header.frame_id;
-
 		std::for_each(result.detections.begin(), result.detections.end(), [&msg, this] (DetectionResult::BoardDetection const & dxn) {
 			ros::Publisher & pub = this->pose_publishers[dxn.name];
 			if (pub.getNumSubscribers() > 0 && dxn.num_inliers > 0) {
@@ -113,7 +126,6 @@ public:
 		});
 		ROS_DEBUG("Tags published");
 
-
 		if (build_marked_image) {
 			ROS_DEBUG("Building marked image");
 			//show input with augmented information
@@ -122,9 +134,14 @@ public:
 			out_msg.header.stamp = msg->header.stamp;
 			out_msg.encoding = sensor_msgs::image_encodings::BGR8;
 			out_msg.image = result.debugImage;
-			ROS_DEBUG("Publishing marked image");
 			image_pub.publish(out_msg.toImageMsg());
-			ROS_DEBUG("Marked image published");
+		}
+
+		if (!this->img_record_path.empty()) {
+			ROS_DEBUG("Recording image");
+			boost::filesystem::path const filename = this->img_record_path / 
+				boost::filesystem::path("img_" + boost::lexical_cast<std::string>(msg->header.stamp.toNSec()) + ".png");
+			cv::imwrite(filename.native(), cv_ptr->image);
 		}
 
 		this->detection_pub.publish(boards_msg);

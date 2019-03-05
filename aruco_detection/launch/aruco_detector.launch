@@ -4,6 +4,7 @@
   <arg name="record" default="false" />
   <arg name="image_topic" default="image" />
   <arg name="image_subtopic" default="image_color" />
+  <arg name="image_record_path" default="" />
 
   <group ns="aruco_detection">
 	  <node pkg="aruco_detection" name="aruco_detection_node" type="aruco_detection_node" output="screen" >
@@ -18,6 +19,7 @@
 	    
 	    <param name="image_is_rectified" value="false" />
 	    <param name="pose_ref_frame" value="robot_base" />
+	    <param name="image_record_path" value="$(arg image_record_path)" />
 	  </node>
 	  
 	  <node if="$(arg visualize)" name="aruco_detection_viz" pkg="image_view" type="image_view">
