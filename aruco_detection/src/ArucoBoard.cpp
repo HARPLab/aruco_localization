@@ -7,6 +7,8 @@
 
 #include "../include/aruco_detection/ArucoBoard.hpp"
 
+/* TODO(pkoppol): Example of forgotten comment. */
+
 namespace aruco {
 
 const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME>
