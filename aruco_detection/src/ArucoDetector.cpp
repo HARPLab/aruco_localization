@@ -151,14 +151,16 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 
 					// manually run estimatePoseBoard instead of calling the function so we can
 					// run getBoardObjAndImagePoints only once
-//					detection.num_inliers = cv::aruco::estimatePoseBoard(detection.marker_corners, detection.marker_ids, board.board, this->cameraModel->fullIntrinsicMatrix(),
-//							cv::Mat_<double>::zeros(4, 1), rvec, tvec);
+#ifdef CV_ARUCO_OPENCV_3_3
 					cv::Mat obj_points, img_points;
 					cv::aruco::getBoardObjectAndImagePoints(board.board, detection.marker_corners, detection.marker_ids, obj_points, img_points);
 					cv::solvePnP(obj_points, img_points, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), rvec, tvec, false);
 					//TODO: cache previous solutions and use it to seed the current one
 					detection.num_inliers = obj_points.total()/4;
-
+#else // CV_ARUCO_OPENCV_3_3
+					detection.num_inliers = cv::aruco::estimatePoseBoard(detection.marker_corners, detection.marker_ids, board.board, this->cameraModel->fullIntrinsicMatrix(),
+							cv::Mat_<double>::zeros(4, 1), rvec, tvec);
+#endif // CV_ARUCO_OPENCV_3_3
 					if (detection.num_inliers > 0) {
 						cv::Mat rot;
 						cv::Rodrigues(rvec, rot);
@@ -171,6 +173,7 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 								tf2::Vector3(
 										tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2)));
 
+#ifdef CV_ARUCO_OPENCV_3_3
 						// Compute detection covariance
 						cv::Mat img_points_proj, jacobian_full;
 						cv::projectPoints(obj_points, rvec, tvec, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), img_points_proj, jacobian_full);
@@ -187,6 +190,7 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 						cv::Mat cov = (jacobian.t()*jacobian).inv() * permutation * cv::norm(img_points, img_points_proj);
 
 						cov.copyTo(cv::Mat(6, 6, cv::DataType<decltype(detection.covariance)::value_type>::depth, detection.covariance.c_array()));
+#endif // CV_ARUCO_OPENCV_3_3
 
 						if (debug_image) {
 

@@ -24,6 +24,10 @@
 	typedef cv::aruco::Board BoardType;
 #endif
 
+#if CV_VERSION_MAJOR >= 3 and CV_VERSION_MINOR >= 3
+#define CV_ARUCO_OPENCV_3_3
+#endif
+
 namespace aruco {
 
 extern const std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> aruco_dict_lookup;
@@ -38,6 +42,10 @@ struct ArucoBoard {
 #else
 	typedef cv::aruco::Dictionary DictType;
 	typedef cv::aruco::Board BoardType;
+#endif
+
+#if CV_VERSION_MAJOR >= 3 and CV_VERSION_MINOR >= 3
+#define CV_ARUCO_OPENCV_3_3
 #endif
 
 	std::string name;
