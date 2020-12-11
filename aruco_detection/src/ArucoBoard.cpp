@@ -44,6 +44,7 @@ ArucoBoard ArucoBoard::load_from_param_ns(ros::NodeHandle const & nh, std::strin
 	std::string dict;
 	int marker_x, marker_y, start_id;
 	double marker_len, marker_sep;
+	bool publish_tf;
 
 	std::string const full_prefix = prefix + "/" + name + "/";
 
@@ -52,11 +53,8 @@ ArucoBoard ArucoBoard::load_from_param_ns(ros::NodeHandle const & nh, std::strin
 	nh.getParam(full_prefix + "marker_y", marker_y);
 	nh.getParam(full_prefix + "marker_length", marker_len);
 	nh.getParam(full_prefix + "marker_separation", marker_sep);
-	if (nh.hasParam(full_prefix + "start_id")) {
-		nh.getParam(full_prefix + "start_id", start_id);
-	} else {
-		start_id = 0;
-	}
+	nh.param<int>(full_prefix + "start_id", start_id, 0);
+	nh.param<bool>(full_prefix + "publish_tf", board.publish_tf, false);
 
 	board.name = name;
 

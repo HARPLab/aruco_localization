@@ -152,15 +152,19 @@ void CameraModel::rectifyImage(const cv::Mat& raw, cv::Mat& rectified,
 	try {
 		this->PinholeCameraModel::rectifyImage(raw, rectified, interpolation);
 	} catch (image_geometry::Exception &) {
-		this->CameraModel::initRectificationMapsFisheye();
-		if (raw.depth() == CV_32F || raw.depth() == CV_64F) {
-			cv::remap(raw, rectified, this->cache_->reduced_map1,
-					this->cache_->reduced_map2, interpolation,
-					cv::BORDER_CONSTANT,
-					std::numeric_limits<float>::quiet_NaN());
+		if (this->cam_info_.distortion_model == "equidistant") {
+			this->CameraModel::initRectificationMapsFisheye();
+			if (raw.depth() == CV_32F || raw.depth() == CV_64F) {
+				cv::remap(raw, rectified, this->cache_->reduced_map1,
+						this->cache_->reduced_map2, interpolation,
+						cv::BORDER_CONSTANT,
+						std::numeric_limits<float>::quiet_NaN());
+			} else {
+				cv::remap(raw, rectified, this->cache_->reduced_map1,
+						this->cache_->reduced_map2, interpolation);
+			}
 		} else {
-			cv::remap(raw, rectified, this->cache_->reduced_map1,
-					this->cache_->reduced_map2, interpolation);
+			throw;
 		}
 	}
 }

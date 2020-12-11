@@ -42,6 +42,7 @@ struct ArucoBoard {
 
 	std::string name;
 	BoardType board;
+	bool publish_tf;
 
 	inline DictType const & get_dict() const {
 #ifdef CV_ARUCO_ADV

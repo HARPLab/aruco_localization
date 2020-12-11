@@ -10,11 +10,13 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <ros/ros.h>
 #include <image_transport/image_transport.h>
+#include <tf2_ros/transform_broadcaster.h>
 #include <cv_bridge/cv_bridge.h>
 #include <XmlRpcValue.h>
 #include <boost/filesystem.hpp>
 
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <geometry_msgs/TransformStamped.h>
 #include <aruco_detection/Boards.h>
 
 #include "aruco_detection/ArucoDetector.hpp"
@@ -44,6 +46,9 @@ private:
 	std::map<std::string, ros::Publisher> pose_publishers;
 
 	boost::filesystem::path const img_record_path;
+
+	tf2_ros::TransformBroadcaster tf_broadcaster;
+	std::string camera_frame_id;
 
 	ArucoDetector detector;
 
@@ -112,18 +117,33 @@ public:
 		aruco_detection::Boards boards_msg = result.asBoards();
 		boards_msg.header.stamp = msg->header.stamp;
 		boards_msg.header.frame_id = msg->header.frame_id;
-		std::for_each(result.detections.begin(), result.detections.end(), [&msg, this] (DetectionResult::BoardDetection const & dxn) {
-			ros::Publisher & pub = this->pose_publishers[dxn.name];
-			if (pub.getNumSubscribers() > 0 && dxn.num_inliers > 0) {
-				// Convert it into a frame that we actually care about
 
-				geometry_msgs::PoseWithCovarianceStamped pose_stamped;
-				pose_stamped.pose = dxn.asPose(true);
-				pose_stamped.header.stamp = msg->header.stamp;
-				pose_stamped.header.frame_id = dxn.name;
-				pub.publish(pose_stamped);
+		std::vector<geometry_msgs::TransformStamped> tfs;
+		std::for_each(result.detections.begin(), result.detections.end(), [&msg, &tfs, this] (DetectionResult::BoardDetection const & dxn) {
+			if (dxn.num_inliers > 0) {
+				ros::Publisher & pub = this->pose_publishers[dxn.name];
+				if (pub.getNumSubscribers() > 0) {
+					geometry_msgs::PoseWithCovarianceStamped pose_stamped;
+					pose_stamped.pose = dxn.asPose(true);
+					pose_stamped.header.stamp = msg->header.stamp;
+					pose_stamped.header.frame_id = dxn.name;
+					pub.publish(pose_stamped);
+				}
+
+				if (dxn.board_def.publish_tf) {
+					geometry_msgs::TransformStamped tf_stamped;
+					tf_stamped.transform = dxn.asTransformMsg(false);
+					tf_stamped.child_frame_id = dxn.name;
+					tf_stamped.header.stamp = msg->header.stamp;
+					tf_stamped.header.frame_id = this->camera_frame_id;
+					tfs.push_back(tf_stamped);
+				}
 			}
 		});
+		if (!tfs.empty()) {
+			this->tf_broadcaster.sendTransform(tfs);
+		}
+
 		ROS_DEBUG("Tags published");
 
 		if (build_marked_image) {
@@ -153,6 +173,7 @@ public:
 	void cam_info_callback(const sensor_msgs::CameraInfo & cam_info) {
 		ROS_INFO_STREAM("Got camera info");
 		this->detector.update_camera_info(cam_info);
+		this->camera_frame_id = cam_info.header.frame_id;
 		cam_info_sub.shutdown();
 	}
 };

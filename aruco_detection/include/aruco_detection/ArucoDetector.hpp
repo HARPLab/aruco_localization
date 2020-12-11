@@ -10,6 +10,7 @@
 
 #include <vector>
 #include <tf2/LinearMath/Transform.h>
+#include <geometry_msgs/Transform.h>
 
 #include "aruco_detection/Boards.h"
 
@@ -20,6 +21,8 @@ namespace aruco {
 
 struct DetectionResult {
 	struct BoardDetection {
+		BoardDetection(ArucoBoard const & board_def) : board_def(board_def) {}
+
 		std::string name;
 		tf2::Transform transform;
 		boost::array<float, 36> covariance;
@@ -29,9 +32,12 @@ struct DetectionResult {
 		std::vector< std::vector< cv::Point2f > > marker_corners;
 		std::vector< int > marker_ids;
 
+		ArucoBoard const & board_def;
+
 		aruco_detection::Board asBoard() const;
 		geometry_msgs::PoseWithCovariance asPose(bool invert = false) const;
 		geometry_msgs::PoseWithCovariancePtr asPosePtr(bool invert = false) const;
+		geometry_msgs::Transform asTransformMsg(bool invert = false) const;
 	};
 
 	cv::Mat debugImage;

@@ -43,6 +43,17 @@ geometry_msgs::PoseWithCovariancePtr DetectionResult::BoardDetection::asPosePtr(
 	return boost::make_shared<geometry_msgs::PoseWithCovariance>(this->asPose(invert));
 }
 
+geometry_msgs::Transform DetectionResult::BoardDetection::asTransformMsg(bool invert) const
+{
+	if (this->num_inliers == 0) {
+		throw std::runtime_error("Transform was not computed");
+	}
+	if (invert) {
+		return tf2::toMsg(this->transform.inverse());
+	} else {
+		return tf2::toMsg(this->transform);
+	}
+}
 
 aruco_detection::Boards DetectionResult::asBoards() const {
 	aruco_detection::Boards boards;
@@ -119,7 +130,7 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 			std::back_inserter(result.detections),
 			[&] (ArucoBoard const & board) {
 
-				DetectionResult::BoardDetection detection;
+				DetectionResult::BoardDetection detection(board);
 				detection.name = board.name;
 				// Detect raw markers
 				std::vector< std::vector< cv::Point2f > > rejected_corners;
@@ -146,62 +157,76 @@ DetectionResult ArucoDetector::detect(cv::Mat const & image,
 					cv::aruco::drawDetectedMarkers(result.debugImage, detection.marker_corners, detection.marker_ids);
 				}
 
-				if (detection.marker_ids.size() > 3) { // at least 3 detected points
-					cv::Mat rvec, tvec;// TODO: cache last position
+				if (detection.marker_ids.size() <= 3) { // need at least 3 detected points for pnp
+					ROS_WARN_STREAM_THROTTLE(2., "[" << detection.name << "] Need >3 markers for pnp, only got " << detection.marker_ids.size() );
+					return detection;
+				}
+				cv::Mat rvec, tvec;// TODO: cache last position
 
-					// manually run estimatePoseBoard instead of calling the function so we can
-					// run getBoardObjAndImagePoints only once
+				// manually run estimatePoseBoard instead of calling the function so we can
+				// run getBoardObjAndImagePoints only once
 //					detection.num_inliers = cv::aruco::estimatePoseBoard(detection.marker_corners, detection.marker_ids, board.board, this->cameraModel->fullIntrinsicMatrix(),
 //							cv::Mat_<double>::zeros(4, 1), rvec, tvec);
-					cv::Mat obj_points, img_points;
-					cv::aruco::getBoardObjectAndImagePoints(board.board, detection.marker_corners, detection.marker_ids, obj_points, img_points);
-					cv::solvePnP(obj_points, img_points, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), rvec, tvec, false);
-					//TODO: cache previous solutions and use it to seed the current one
-					detection.num_inliers = obj_points.total()/4;
+				cv::Mat obj_points, img_points;
+				cv::aruco::getBoardObjectAndImagePoints(board.board, detection.marker_corners, detection.marker_ids, obj_points, img_points);
+				ROS_DEBUG_STREAM("[" << detection.name << "] got board points " << obj_points << ", image points " << img_points);
+				cv::solvePnP(obj_points, img_points, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), rvec, tvec, false);
 
-					if (detection.num_inliers > 0) {
-						cv::Mat rot;
-						cv::Rodrigues(rvec, rot);
+				ROS_DEBUG_STREAM("[" << detection.name << "] got transform " << rvec << ", " << tvec);
+				//TODO: cache previous solutions and use it to seed the current one
+				detection.num_inliers = obj_points.total()/4;
 
-						detection.transform = tf2::Transform(
-								tf2::Matrix3x3(
-										rot.at<double>(0), rot.at<double>(1), rot.at<double>(2),
-										rot.at<double>(3), rot.at<double>(4), rot.at<double>(5),
-										rot.at<double>(6), rot.at<double>(7), rot.at<double>(8)),
-								tf2::Vector3(
-										tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2)));
+				if (detection.num_inliers == 0) {
+					ROS_WARN_STREAM_THROTTLE(2., "[" << detection.name << "] solvePnP did not terminate");
+					return detection;
+				}
 
-						// Compute detection covariance
-						cv::Mat img_points_proj, jacobian_full;
-						cv::projectPoints(obj_points, rvec, tvec, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), img_points_proj, jacobian_full);
-						cv::Mat jacobian(jacobian_full, cv::Range::all(), cv::Range(0, 6));
-						static cv::Mat const permutation = (cv::Mat_<double>(6,6) <<
-								0, 0, 0, 1, 0, 0,
-								0, 0, 0, 0, 1, 0,
-								0, 0, 0, 0, 0, 1,
-								1, 0, 0, 0, 0, 0,
-								0, 1, 0, 0, 0, 0,
-								0, 0, 1, 0, 0, 0
-							);
-						double const error = cv::norm(img_points, img_points_proj) * 2 / img_points.total();
-						cv::Mat cov = (jacobian.t()*jacobian).inv() * permutation * cv::norm(img_points, img_points_proj);
+				cv::Mat rot;
+				cv::Rodrigues(rvec, rot);
 
-						cov.copyTo(cv::Mat(6, 6, cv::DataType<decltype(detection.covariance)::value_type>::depth, detection.covariance.c_array()));
+				detection.transform = tf2::Transform(
+						tf2::Matrix3x3(
+								rot.at<double>(0), rot.at<double>(1), rot.at<double>(2),
+								rot.at<double>(3), rot.at<double>(4), rot.at<double>(5),
+								rot.at<double>(6), rot.at<double>(7), rot.at<double>(8)),
+						tf2::Vector3(
+								tvec.at<double>(0), tvec.at<double>(1), tvec.at<double>(2)));
 
-						if (debug_image) {
+				// Compute detection covariance
+				cv::Mat img_points_proj, jacobian_full;
+				cv::projectPoints(obj_points, rvec, tvec, this->cameraModel->fullIntrinsicMatrix(), cv::Mat_<double>::zeros(4, 1), img_points_proj, jacobian_full);
+				cv::Mat jacobian(jacobian_full, cv::Range::all(), cv::Range(0, 6));
+				static cv::Mat const permutation = (cv::Mat_<double>(6,6) <<
+						0, 0, 0, 1, 0, 0,
+						0, 0, 0, 0, 1, 0,
+						0, 0, 0, 0, 0, 1,
+						1, 0, 0, 0, 0, 0,
+						0, 1, 0, 0, 0, 0,
+						0, 0, 1, 0, 0, 0
+					);
+				double const error = cv::norm(img_points, img_points_proj) * 2 / img_points.total();
+				cv::Mat cov = (jacobian.t()*jacobian).inv() * permutation * cv::norm(img_points, img_points_proj);
 
-							cv::Point2d origin = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0)));
-							cv::Point2d ax_x = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0.1, 0, 0)));
-							cv::Point2d ax_y = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0.1, 0)));
-							cv::Point2d ax_z = this->cameraModel->rectifyPoint(this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0.1)));
+				cov.copyTo(cv::Mat(6, 6, cv::DataType<decltype(detection.covariance)::value_type>::depth, detection.covariance.c_array()));
 
-							// draw axis lines
-							cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_x.x, ax_x.y), cv::Scalar(0, 0, 255), 3);
-							cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_y.x, ax_y.y), cv::Scalar(0, 255, 0), 3);
-							cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_z.x, ax_z.y), cv::Scalar(255, 0, 0), 3);
-						}
+				if (debug_image) {
+
+					cv::Point2d origin = this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0));
+					cv::Point2d ax_x = this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0.1, 0, 0));
+					cv::Point2d ax_y = this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0.1, 0));
+					cv::Point2d ax_z = this->cameraModel->projectPoint(rvec, tvec, cv::Point3d(0, 0, 0.1));
+
+					if (!this->useRectifiedImages) {
+						origin = this->cameraModel->rectifyPoint(origin);
+						ax_x = this->cameraModel->rectifyPoint(ax_x);
+						ax_y = this->cameraModel->rectifyPoint(ax_y);
+						ax_z = this->cameraModel->rectifyPoint(ax_z);
 					}
 
+					// draw axis lines
+					cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_x.x, ax_x.y), cv::Scalar(0, 0, 255), 3);
+					cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_y.x, ax_y.y), cv::Scalar(0, 255, 0), 3);
+					cv::line(result.debugImage, cv::Point(origin.x, origin.y), cv::Point(ax_z.x, ax_z.y), cv::Scalar(255, 0, 0), 3);
 				}
 
 				return detection;

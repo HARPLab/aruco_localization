@@ -18,7 +18,6 @@
 	    <!-- <rosparam command="load" ns="board/fridge_column_grid" file="$(find aruco_detection)/config/boards/fridge_column_grid.yml" /> -->
 	    
 	    <param name="image_is_rectified" value="false" />
-	    <param name="pose_ref_frame" value="robot_base" />
 	    <param name="image_record_path" value="$(arg image_record_path)" />
 	  </node>
 	  
